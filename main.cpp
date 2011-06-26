@@ -3,7 +3,9 @@
 #include <vector>
 #include "bdf.h"
 #include "code_convert.h"
-#include "bmp_font_encoder.h"
+#include "bmp_font.h"
+#include "bit_writer.h"
+#include "bit_reader.h"
 
 size_t GetFileSize(FILE* file)
 {
@@ -67,13 +69,20 @@ int main(int argc, char* argv[])
 		encoding_idx_table[ seg.ENCODING ] = i;
 	}
 	
+	std::string ret;
+	ret.resize(200);
 	{
 		const size_t hBytes = (header.FONTBOUNDINGBOX[0] + 7) / 8;
 #if 1
+		BitWriter bitWriter;
+		BitReader bitReader;
+		uint8_t dest[2048] = {0};
+		bitWriter.Set(&dest[0]);
+		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-//		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
-		const wchar_t* str = L"あ";
-		BitmapFontEncoder encoder;
+		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
+//		const wchar_t* str = L"名前はまだ無い。";
+		BitmapFont bmpFont;
 		for (size_t i=0; i<wcslen(str); ++i) {
 			wchar_t c = str[i];
 			uint16_t unicode = c;
@@ -83,20 +92,27 @@ int main(int argc, char* argv[])
 			uint32_t offset = idx * segDataSize;
 			uint8_t w = seg.BBX[0];
 			uint8_t h = seg.BBX[1];
-			encoder.Init(seg.BBX[0], seg.BBX[1]);
+			bmpFont.Init(seg.BBX[0], seg.BBX[1]);
 			for (size_t y=0; y<segDataSize/hBytes; ++y) {
 				for (size_t hi=0; hi<hBytes; ++hi) {
 					uint8_t b = data[offset + hBytes*y + hi];
 					for (size_t x=0; x<8; ++x) {
 						if ((b >> (7-x)) & 1) {
-							encoder.FillPixel(8*hi+x, y);
+							bmpFont.FillPixel(8*hi+x, y);
 						}
 					}
 				}
 			}
-			encoder.Compact();
-			fputs(encoder.Dump().c_str(), of);
-			fputs(encoder.BreakPixels().c_str(), of);
+			bmpFont.Compact();
+			fputs(bmpFont.Dump().c_str(), of);
+			fputs(Encode(bmpFont, bitWriter).c_str(), of);
+		}
+
+		bmpFont.Init(1,1);
+		for (size_t i=0; i<wcslen(str); ++i) {
+			Decode(bmpFont, bitReader);
+			std::string s = bmpFont.Dump();
+			fputs(s.c_str(), of);
 		}
 		fclose(of);
 #else
@@ -121,6 +137,7 @@ int main(int argc, char* argv[])
 		fclose(f);
 		fclose(of);
 #endif
+		int hoge = 0;
 	}
 	return 0;
 }

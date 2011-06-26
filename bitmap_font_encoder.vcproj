@@ -177,7 +177,7 @@
 				>
 			</File>
 			<File
-				RelativePath=".\bmp_font_encoder.cpp"
+				RelativePath=".\bmp_font.cpp"
 				>
 			</File>
 			<File
@@ -203,7 +203,15 @@
 				>
 			</File>
 			<File
-				RelativePath=".\bmp_font_encoder.h"
+				RelativePath=".\bit_reader.h"
+				>
+			</File>
+			<File
+				RelativePath=".\bit_writer.h"
+				>
+			</File>
+			<File
+				RelativePath=".\bmp_font.h"
 				>
 			</File>
 			<File
