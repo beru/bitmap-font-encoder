@@ -1,0 +1,316 @@
+
+shnmk16 で調査
+
+14 * 15 = 210
+
+4 * 4 = 16
+
+0
+	next
+1
+	draw
+	
+	? table look up 1
+		table idx 1
+	
+	start 4
+	len	4
+	
+table
+	start 4
+	len	4
+	
+
+9*18+25 = 187
+
+-------------------------
+draw	1	15
+next
+draw	7	1
+next
+draw	3	9
+next
+next
+draw	3	9
+next
+next
+draw	3	9
+next
+next
+draw	3	9
+next
+next
+draw	4	8
+next
+draw	3	1
+draw	9	1
+next
+draw	1	2
+draw	6	3
+next
+draw	4	2
+draw	8	3
+next
+draw	0	4
+draw	11	3
+
+next
+next
+next
+draw	2	7
+next
+next
+draw	9	3
+next
+next
+next
+next
+next
+next
+draw	2	7
+
+------------------------
+
+56 + 9 * 10 + 21 = 167
+
+56 + 10 * 4 + 3 * 4 + 16 + 21 = 145
+
+
+-------------------------
+draw	1	15
+next
+draw	7	1
+next
+draw	4	7
+next
+next
+draw	4	7
+next
+next
+draw	4	7
+next
+next
+draw	4	7
+next
+next
+draw	4	8
+
+
+next
+next
+next
+draw	2	7
+next
+next
+draw	9	1
+next
+next
+next
+next
+next
+next
+draw	2	7
+
+---------------------------------
+
+伊
+
+もし同じラインに２回書く必要が無い場合は、draw の後に自動的に next を発行する方式にすれば命令数を節約できる。
+
+15 * 16 = 240
+
+9 * 13 + 31 = 148
+
+next
+draw	6	7
+next
+next
+next
+next
+draw	4	11
+next
+next
+next
+next
+draw	6	7
+next
+next
+next
+next
+next
+next
+next
+
+draw	8	1
+next
+draw	7	1
+next
+draw	5	2
+next
+draw	3	13
+next
+draw	0	3
+next
+next
+draw	15	1
+next
+draw	14	1
+next
+draw	12	2
+next
+draw	2	10
+next
+next
+next
+draw	2	7
+next
+next
+next
+
+---------------
+
+間
+
+drawコマンドで開始位置が大きい為に長さが制限される場合は、必要最小限のbit数で記録する。
+
+14 * 15 = 210
+
+9 * 16 + 23 = 167
+
+draw	1	4
+draw	9	5
+next
+draw	1	4
+draw	9	5
+next
+next
+draw	1	4
+draw	9	5
+next
+draw	5	4
+next
+next
+draw	5	4
+next
+next
+next
+draw	5	4
+next
+next
+draw	12	2
+
+draw	0	15
+next
+next
+next
+draw	7	6
+next
+draw	0	6
+next
+next
+next
+draw	0	6
+next
+draw	7	6
+next
+next
+next
+next
+draw	0	15
+
+-------------
+
+山
+
+13 * 15 = 195
+
+24 + 9 * 4 = 60
+
+next
+next
+next
+next
+next
+next
+next
+next
+next
+next
+next
+next
+next
+next
+draw	0	13
+
+draw	5	10
+next
+next
+next
+next
+next
+draw	0	15
+next
+next
+next
+next
+next
+draw	5	10
+
+--------------------
+
+央
+
+15 * 16 = 240
+
+9 * 15 + 29 = 164
+
+next
+next
+next
+draw	2	11
+next
+next
+next
+next
+next
+draw	0	15
+next
+next
+next
+draw	5	1
+draw	9	1
+next
+draw	4	1
+draw	10	1
+next
+draw	2	2
+draw	11	2
+next
+draw	0	2
+draw	13	2
+
+next
+next
+draw	3	6
+next
+next
+next
+next
+draw	10	2
+next
+draw	0	10
+next
+draw	10	2
+next
+next
+next
+next
+draw	3	6
+next
+next
+next
+
+-------------------
+
+
+

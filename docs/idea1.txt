@@ -1,0 +1,84 @@
+#ifndef BITMAP_FONT_RASTERIZER_H_INCLUDED__
+#define BITMAP_FONT_RASTERIZER_H_INCLUDED__
+
+/*
+
+----------
+
+フォントを効率よく描画する為に、描画方法を何種類かに分ける。
+	
+	描画方法種別
+		2bit
+	
+	ドット打ちの配列（その他）
+		
+		コマンド数
+			1～256
+			8bit
+		
+		ドット横幅 1～4 : 2bit
+		ドット縦幅 1～4 : 2bit
+		
+		コマンド
+			X座標
+			Y座標
+		
+	矩形の配列（直線に有効）
+		
+		コマンド数
+			1～256
+			8bit
+			
+		コマンド
+			X座標
+			Y座標
+			長さ
+		
+	短い矩形並べ（斜め線に有効）
+		コマンド数
+			1～256
+			8bit
+			
+		描画向き
+			横 : 0
+			縦 : 1
+			1bit
+		
+		ペン幅 : 1 ～ 4 : 2bit
+		
+		短矩形描画コマンド
+			ペン設定
+				長さ 1 ～ 8 : 3bit
+				
+			座標設定 & 描画
+				X座標、0～63、6bit
+				Y座標、0～63、6bit
+			
+			座標2インクリメント方向設定
+				0 : ++
+				1 : --
+				1bit
+			
+			座標インクリメント & 描画
+				座標1 をインクリメントするかどうか 1bit
+				座標2 をインクリメントするかどうか 1bit
+	
+もし横幅や縦幅が
+	32以下なら、座標は5ビットにする。
+	16以下なら、座標は4ビットにする。
+
+*/
+
+namespace BitmapFontRasterize {
+
+enum CMD {
+	CMD_PEN,
+	CMD_POS,
+	CMD_INCDIR,
+	CMD_INC,
+};
+
+
+} // namespace BitmapFontRasterize
+
+#endif // BITMAP_FONT_RASTERIZER_H_INCLUDED__
