@@ -80,8 +80,10 @@ int main(int argc, char* argv[])
 		bitWriter.Set(&dest[0]);
 		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
-//		const wchar_t* str = L"名前はまだ無い。";
+		const wchar_t* str = L"計測機器端麗辛口";
+//		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
+//		const wchar_t* str = L"ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをん";
+//		const wchar_t* str = L"ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ";
 		BitmapFont bmpFont;
 		for (size_t i=0; i<wcslen(str); ++i) {
 			wchar_t c = str[i];
@@ -113,6 +115,7 @@ int main(int argc, char* argv[])
 			Decode(bmpFont, bitReader);
 			std::string s = bmpFont.Dump();
 			fputs(s.c_str(), of);
+			fputs("\r\n", of);
 		}
 		fclose(of);
 #else
