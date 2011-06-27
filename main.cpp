@@ -80,7 +80,8 @@ int main(int argc, char* argv[])
 		bitWriter.Set(&dest[0]);
 		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-		const wchar_t* str = L"計測機器端麗辛口";
+		const wchar_t* str = L".";
+//		const wchar_t* str = L"計測機器端麗辛口";
 //		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
 //		const wchar_t* str = L"ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをん";
 //		const wchar_t* str = L"ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ";
