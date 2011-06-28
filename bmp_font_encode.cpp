@@ -114,6 +114,20 @@ void buildCommands(
 	}
 }
 
+bool isOverlappingWithVFill(const std::vector<FillInfo>& vFills, uint8_t x, uint8_t y)
+{
+	for (size_t i=0; i<vFills.size(); ++i) {
+		const FillInfo& vfi = vFills[i];
+		if (vfi.p1 != x) {
+			continue;
+		}
+		if (vfi.p2 <= y && y < vfi.p2+vfi.len) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void searchFills(
 	const BitmapFont& bf,
 	std::vector<FillInfo>& hFills,
@@ -130,36 +144,26 @@ void searchFills(
 			fi.p1 = y;
 			fi.p2 = x;
 			
-			bool bVMatched = false;
-			// find existing vFill entries
-			for (size_t i=0; i<vFills.size(); ++i) {
-				const FillInfo& vfi = vFills[i];
-				if (vfi.p1 != x) {
-					continue;
-				}
-				if (vfi.p2 <= y && y < vfi.p2+vfi.len) {
-					bVMatched = true;
-				}
+			if (isOverlappingWithVFill(vFills, x, y)) {
+				continue;
 			}
 			// if not last row
 			if (y != bf.h_ - 1) {
-				if (!bVMatched) {
-					uint8_t ylen = 1;
-					// find vertical repeat
-					for (uint8_t y2=y+1; y2<bf.h_; ++y2) {
-						if (!bf.values_[y2][x]) {
-							break;
-						}
-						++ylen;
+				uint8_t ylen = 1;
+				// find vertical repeat
+				for (uint8_t y2=y+1; y2<bf.h_; ++y2) {
+					if (!bf.values_[y2][x]) {
+						break;
 					}
-					if (ylen != 1) {
-						FillInfo fi2;
-						fi2.p1 = x;
-						fi2.p2 = y;
-						fi2.len = ylen;
-						vFills.push_back(fi2);
-						bVMatched = true;
-					}
+					++ylen;
+				}
+				if (ylen != 1) {
+					FillInfo fi2;
+					fi2.p1 = x;
+					fi2.p2 = y;
+					fi2.len = ylen;
+					vFills.push_back(fi2);
+					continue;
 				}
 			}
 
@@ -173,13 +177,13 @@ void searchFills(
 					}
 					++len;
 				}
+				// 線の末尾が縦方向の線と重なる場合は長さを短くする
+				if (len > 1 && isOverlappingWithVFill(vFills, x+len-1, y)) {
+					--len;
+				}
 			}
 			if (len == 1) {
-				if (bVMatched) {
-					continue;
-				}
-#if 1
-				// 開始場所が出来るだけ後ろに位置する面に記録する方が、長さのビット数を短く出来る。
+				// 開始場所が出来るだけ後ろに位置する面に記録する方が、長さのビット数を短く出来るので
 				if (bf.h_ - y < bf.w_ - x) {
 					fi.p1 = x;
 					fi.p2 = y;
@@ -187,7 +191,6 @@ void searchFills(
 					vFills.push_back(fi);
 					continue;
 				}
-#endif
 			}
 			fi.len = len;
 			hFills.push_back(fi);
