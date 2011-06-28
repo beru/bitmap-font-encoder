@@ -274,7 +274,7 @@ void optimizeFills(
 						hMaxLenBitLen = calcNumBits(hMaxLen);
 						bReduced = true;
 					}
-				}else if (vf.len != 1 || vf.p2+vf.len-1 == fi.p1) {
+				}else if (vf.len != 1 && vf.p2+vf.len-1 == fi.p1) {
 					++fi.p2;
 					--fi.len;
 					hMaxLen = fi.len;
