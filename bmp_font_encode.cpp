@@ -295,6 +295,10 @@ void optimizeFills(
 			++fi.p2;
 			--fi.len;
 		}
+		// 終点が横線とぶつかっていたら終点をずらす
+		if (isOverlappingWithFill(hFills, fi.p2+fi.len-1, fi.p1)) {
+			--fi.len;
+		}
 		for (size_t j=0; j<hFills.size(); ++j) {
 			FillInfo& hf = hFills[j];
 			if (fi.p2 == hf.p1) {
@@ -308,23 +312,28 @@ void optimizeFills(
 						hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
 						++fi.p2;
 						--fi.len;
-						break;
 					}
 				}
 			}
-			if (fi.p2+fi.len-1 == hf.p1 && hf.p2 != 0) {
-				// 終点の右隣に横線が存在したら、その横線を左側に延長出来ないかチェック
-				uint8_t newLenBits = calcNumBits(hf.len+1);
-				if (newLenBits <= hMaxLenBitLen) {
-					--hf.p2;
-					++hf.len;
-					hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
-					--fi.len;
-					break;
+			uint8_t ep = fi.p2 + fi.len-1;
+			if (ep == hf.p1) {
+				if (fi.p1+1 == hf.p2) { // 終点の右隣に横線が存在したら、その横線を左側に延長出来ないかチェック
+					uint8_t newLenBits = calcNumBits(hf.len+1);
+					if (newLenBits <= hMaxLenBitLen) {
+						--hf.p2;
+						++hf.len;
+						hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
+						--fi.len;
+					}
+				}else if (fi.p1 == hf.p2+hf.len) { // 終点の左隣に横線が存在したら、その横線を右側に延長出来ないかチェック
+					uint8_t newLenBits = calcNumBits(hf.len+1);
+					if (newLenBits <= hMaxLenBitLen) {
+						++hf.len;
+						hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
+						++fi.p2;
+						--fi.len;
+					}
 				}
-			}else if (1) {
-				// 終点の左隣に横線が存在したら、その横線を右側に延長出来ないかチェック
-				
 			}
 		}
 	}
