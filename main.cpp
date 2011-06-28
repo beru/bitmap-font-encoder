@@ -8,14 +8,6 @@
 #include "bit_writer.h"
 #include "bit_reader.h"
 
-size_t GetFileSize(FILE* file)
-{
-	fseek(file, 0, SEEK_END);
-	int length = ftell(file);
-	fseek(file, 0, SEEK_SET);
-	return length;
-}
-
 // encoding code to segment index
 uint16_t encoding_idx_table[0xffff];
 
@@ -81,11 +73,11 @@ int main(int argc, char* argv[])
 		bitWriter.Set(&dest[0]);
 		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-//		const wchar_t* str = L"ィイ";
+		const wchar_t* str = L"キクタ";
 //		const wchar_t* str = L"前後通信非入出力確認間初期防無効禁止容注意取扱説明書極性番的差現使用害切替損傷最大動押増加項数値点滅電源圧流気接続能表示設定誤操作等荷演算解除総重量軸画字絹風袋線兆億万千百十九八七六五四三二一＝】計測機器端麗辛口";
 //		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
 //		const wchar_t* str = L"ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをん";
-		const wchar_t* str = L"ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ";
+//		const wchar_t* str = L"ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ";
 		BitmapFont bmpFont;
 		for (size_t i=0; i<wcslen(str); ++i) {
 			wchar_t c = str[i];
@@ -111,7 +103,10 @@ int main(int argc, char* argv[])
 			bmpFont.Compact();
 			fputs(bmpFont.Dump().c_str(), of);
 			size_t oldNBits = bitWriter.GetNBits();
-			fputs(Encode(bmpFont, bitWriter).c_str(), of);
+			fputs(
+				Encode(bmpFont, bitWriter).c_str()
+			, of)
+			;
 			fprintf(of, "num of bits : %d\r\n", bitWriter.GetNBits()-oldNBits);
 		}
 

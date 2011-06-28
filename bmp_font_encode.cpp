@@ -148,6 +148,18 @@ void searchFills(
 				continue;
 			}
 			// if not last row
+#if 1
+			uint8_t vRepeatLen = 1;
+			if (y != bf.h_ - 1) {
+				// find vertical repeat
+				for (uint8_t y2=y+1; y2<bf.h_; ++y2) {
+					if (!bf.values_[y2][x]) {
+						break;
+					}
+					++vRepeatLen;
+				}
+			}
+#else
 			if (y != bf.h_ - 1) {
 				uint8_t ylen = 1;
 				// find vertical repeat
@@ -166,6 +178,7 @@ void searchFills(
 					continue;
 				}
 			}
+#endif
 
 			uint8_t len = 1;
 			// if last column
@@ -182,6 +195,24 @@ void searchFills(
 					--len;
 				}
 			}
+#if 1
+			if (vRepeatLen != 1) {
+				if (vRepeatLen > len) {
+					FillInfo fi2;
+					fi2.p1 = x;
+					fi2.p2 = y;
+					fi2.len = vRepeatLen;
+					vFills.push_back(fi2);
+					continue;
+				}else {
+					FillInfo fi2;
+					fi2.p1 = x;
+					fi2.p2 = y + 1;
+					fi2.len = vRepeatLen - 1;
+					vFills.push_back(fi2);
+				}
+			}
+#endif
 			if (len == 1) {
 				// 開始場所が出来るだけ後ろに位置する面に記録する方が、長さのビット数を短く出来るので
 				if (bf.h_ - y < bf.w_ - x) {
@@ -200,12 +231,74 @@ void searchFills(
 	}
 }
 
+void optimizeFills(
+	std::vector<FillInfo>& hFills,
+	std::vector<FillInfo>& vFills
+	)
+{
+	// 長い横線の端を縦線に移動して長さを出来るだけ短くする最適化
+	uint8_t hMaxLen = 0;
+	uint8_t vMaxLen = 0;
+	for (size_t i=0; i<hFills.size(); ++i) {
+		const FillInfo& fi = hFills[i];
+		hMaxLen = std::max(hMaxLen, fi.len);
+	}
+	for (size_t i=0; i<vFills.size(); ++i) {
+		const FillInfo& fi = vFills[i];
+		vMaxLen = std::max(vMaxLen, fi.len);
+	}
+	uint8_t hMaxLenBitLen = calcNumBits(hMaxLen);
+	uint8_t vMaxLenBitLen = calcNumBits(vMaxLen);
+	for (size_t i=0; i<hFills.size(); ++i) {
+		FillInfo& fi = hFills[i];
+		if (fi.len == 1 || fi.len != hMaxLen) {
+			continue;
+		}
+		do {
+			bool bReduced = false;
+			for (size_t j=0; j<vFills.size(); ++j) {
+				FillInfo& vf = vFills[j];
+				if (vf.p1 != fi.p2) {
+					continue;
+				}
+				// 次の行に縦線がある場合
+				if (vf.p2 == fi.p1+1) {
+					uint8_t bitLen = calcNumBits(vf.len);
+					uint8_t newBitLen = calcNumBits(vf.len+1);
+					if (bitLen == newBitLen || newBitLen <= vMaxLenBitLen) {
+						++fi.p2;
+						--fi.len;
+						--vf.p2;
+						++vf.len;
+						hMaxLen = fi.len;
+						hMaxLenBitLen = calcNumBits(hMaxLen);
+						bReduced = true;
+					}
+				}else if (vf.len != 1 || vf.p2+vf.len-1 == fi.p1) {
+					++fi.p2;
+					--fi.len;
+					hMaxLen = fi.len;
+					hMaxLenBitLen = calcNumBits(hMaxLen);
+					bReduced = true;
+				}
+				if (fi.len == 1) {
+					break;
+				}
+			}
+			if (!bReduced) {
+				break;
+			}
+		} while (fi.len > 1);
+	}
+}
+
 std::string Encode(const BitmapFont& bf, BitWriter& bw)
 {
 	std::vector<FillInfo> hFills;
 	std::vector<FillInfo> vFills;
 	
 	searchFills(bf, hFills, vFills);
+	optimizeFills(hFills, vFills);
 	std::sort(vFills.begin(), vFills.end());
 	
 	std::vector<std::string> cmds;
