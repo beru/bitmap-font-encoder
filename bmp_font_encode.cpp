@@ -234,28 +234,43 @@ void optimizeFills(
 			bool bReduced = false;
 			for (size_t j=0; j<vFills.size(); ++j) {
 				FillInfo& vf = vFills[j];
-				if (vf.p1 != fi.p2) {
-					continue;
-				}
-				// 次の行に縦線がある場合
-				if (vf.p2 == fi.p1+1) {
-					uint8_t bitLen = calcNumBits(vf.len);
-					uint8_t newBitLen = calcNumBits(vf.len+1);
-					if (bitLen == newBitLen || newBitLen <= vMaxLenBitLen) {
+				// 始点調査
+				if (fi.p2 == vf.p1) {
+					// 次の行に縦線がある場合
+					if (vf.p2 == fi.p1+1) {
+						uint8_t bitLen = calcNumBits(vf.len);
+						uint8_t newBitLen = calcNumBits(vf.len+1);
+						if (bitLen == newBitLen || newBitLen <= vMaxLenBitLen) {
+							++fi.p2;
+							--fi.len;
+							--vf.p2;
+							++vf.len;
+							hMaxLen = fi.len;
+							hMaxLenBitLen = calcNumBits(hMaxLen);
+							bReduced = true;
+						}
+					}else if (vf.len != 1 && vf.p2+vf.len-1 == fi.p1) {
+						// 縦線の終点を延長すれば横線の始点を右にずらせる
 						++fi.p2;
 						--fi.len;
-						--vf.p2;
-						++vf.len;
 						hMaxLen = fi.len;
 						hMaxLenBitLen = calcNumBits(hMaxLen);
 						bReduced = true;
 					}
-				}else if (vf.len != 1 && vf.p2+vf.len-1 == fi.p1) {
-					++fi.p2;
-					--fi.len;
-					hMaxLen = fi.len;
-					hMaxLenBitLen = calcNumBits(hMaxLen);
-					bReduced = true;
+				}else if (fi.p2+fi.len-1 == vf.p1) {
+					// 縦線の始点を上に延長すれば、横線の終点を左にずらせる
+					if (vf.p2 != 0 && vf.p2-1 == fi.p1) {
+						uint8_t newBitLen = calcNumBits(vf.len+1);
+						if (newBitLen == vMaxLenBitLen) {
+							--fi.len;
+							hMaxLen = fi.len;
+							hMaxLenBitLen = calcNumBits(hMaxLen);
+							bReduced = true;
+							--vf.p2;
+							++vf.len;
+							vMaxLen = std::max(vMaxLen, vf.len);
+						}
+					}
 				}
 				if (fi.len == 1) {
 					break;
@@ -266,7 +281,6 @@ void optimizeFills(
 			}
 		}
 	}
-
 	if (vMaxLen == 1) {
 		return;
 	}
