@@ -30,7 +30,5 @@ public:
 };
 
 void Decode(BitmapFont& bf, class BitReader& br);
-std::string Encode(const BitmapFont& bf, class BitWriter& bw);
-
 
 #endif // #ifndef RASTERIZER_H_INCLUDED__

@@ -4,6 +4,7 @@
 #include "bdf.h"
 #include "code_convert.h"
 #include "bmp_font.h"
+#include "bmp_font_encode.h"
 #include "bit_writer.h"
 #include "bit_reader.h"
 
@@ -76,12 +77,12 @@ int main(int argc, char* argv[])
 #if 1
 		BitWriter bitWriter;
 		BitReader bitReader;
-		uint8_t dest[2048] = {0};
+		uint8_t dest[4096] = {0};
 		bitWriter.Set(&dest[0]);
 		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-		const wchar_t* str = L".";
-//		const wchar_t* str = L"計測機器端麗辛口";
+//		const wchar_t* str = L"";
+		const wchar_t* str = L"前後通信非入出力確認間初期防無効禁止容注意取扱説明書極性番的差現使用害切替損傷最大動押増加項数値点滅電源圧流気接続能表示設定誤操作等荷演算解除総重量軸画字絹風袋線兆億万千百十九八七六五四三二一＝】計測機器端麗辛口";
 //		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
 //		const wchar_t* str = L"ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをん";
 //		const wchar_t* str = L"ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ";
@@ -90,6 +91,7 @@ int main(int argc, char* argv[])
 			wchar_t c = str[i];
 			uint16_t unicode = c;
 			uint16_t jis = CodeConvert::unicode_to_jis(unicode);
+			assert(jis);
 			uint16_t idx = encoding_idx_table[jis];
 			const BDF::CharacterSegment& seg = segments[idx];
 			uint32_t offset = idx * segDataSize;
@@ -108,7 +110,9 @@ int main(int argc, char* argv[])
 			}
 			bmpFont.Compact();
 			fputs(bmpFont.Dump().c_str(), of);
+			size_t oldNBits = bitWriter.GetNBits();
 			fputs(Encode(bmpFont, bitWriter).c_str(), of);
+			fprintf(of, "num of bits : %d\r\n", bitWriter.GetNBits()-oldNBits);
 		}
 
 		bmpFont.Init(1,1);

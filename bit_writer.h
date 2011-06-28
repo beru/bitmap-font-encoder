@@ -31,8 +31,8 @@ public:
 		++nBits_;
 	}
 	
-	size_t nBits() const { return nBits_; }
-	size_t nBytes() const { return (dest_ - initialDest_) + (counter_ ? 1 : 0); }
+	size_t GetNBits() const { return nBits_; }
+	size_t GetNBytes() const { return (dest_ - initialDest_) + (counter_ ? 1 : 0); }
 private:
 	size_t nBits_;
 	uint8_t counter_;

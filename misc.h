@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 inline
 uint8_t hexCharToInt(char c)
 {
@@ -44,3 +46,8 @@ void readHexBytes(const char* str, uint8_t* data, size_t nBytes)
 	}
 }
 
+inline
+uint8_t calcNumBits(uint8_t len)
+{
+	return (uint8_t) std::ceil(std::log((double)len) / std::log(2.0));
+}
