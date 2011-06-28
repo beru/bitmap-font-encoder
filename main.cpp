@@ -117,6 +117,7 @@ int main(int argc, char* argv[])
 			fputs(s.c_str(), of);
 			fputs("\r\n", of);
 		}
+		fprintf(of, "total num of bits : %d\r\n", bitWriter.GetNBits());
 		fclose(of);
 #else
 		FILE* f = fopen("imacat.txt", "rb");		// http://www.aozora.gr.jp/cards/000148/files/789_14547.html ( save in utf-16le )

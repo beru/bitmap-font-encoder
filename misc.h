@@ -46,6 +46,7 @@ void readHexBytes(const char* str, uint8_t* data, size_t nBytes)
 	}
 }
 
+// 1 origin
 inline
 uint8_t calcNumBits(uint8_t len)
 {

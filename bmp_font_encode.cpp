@@ -114,14 +114,14 @@ void buildCommands(
 	}
 }
 
-bool isOverlappingWithVFill(const std::vector<FillInfo>& vFills, uint8_t x, uint8_t y)
+bool isOverlappingWithFill(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t p2)
 {
-	for (size_t i=0; i<vFills.size(); ++i) {
-		const FillInfo& vfi = vFills[i];
-		if (vfi.p1 != x) {
+	for (size_t i=0; i<fills.size(); ++i) {
+		const FillInfo& vfi = fills[i];
+		if (vfi.p1 != p1) {
 			continue;
 		}
-		if (vfi.p2 <= y && y < vfi.p2+vfi.len) {
+		if (vfi.p2 <= p2 && p2 < vfi.p2+vfi.len) {
 			return true;
 		}
 	}
@@ -144,11 +144,10 @@ void searchFills(
 			fi.p1 = y;
 			fi.p2 = x;
 			
-			if (isOverlappingWithVFill(vFills, x, y)) {
+			if (isOverlappingWithFill(vFills, x, y)) {
 				continue;
 			}
 			// if not last row
-#if 1
 			uint8_t vRepeatLen = 1;
 			if (y != bf.h_ - 1) {
 				// find vertical repeat
@@ -159,27 +158,6 @@ void searchFills(
 					++vRepeatLen;
 				}
 			}
-#else
-			if (y != bf.h_ - 1) {
-				uint8_t ylen = 1;
-				// find vertical repeat
-				for (uint8_t y2=y+1; y2<bf.h_; ++y2) {
-					if (!bf.values_[y2][x]) {
-						break;
-					}
-					++ylen;
-				}
-				if (ylen != 1) {
-					FillInfo fi2;
-					fi2.p1 = x;
-					fi2.p2 = y;
-					fi2.len = ylen;
-					vFills.push_back(fi2);
-					continue;
-				}
-			}
-#endif
-
 			uint8_t len = 1;
 			// if last column
 			if (x != bf.w_ - 1) {
@@ -191,11 +169,10 @@ void searchFills(
 					++len;
 				}
 				// 線の末尾が縦方向の線と重なる場合は長さを短くする
-				if (len > 1 && isOverlappingWithVFill(vFills, x+len-1, y)) {
+				if (len > 1 && isOverlappingWithFill(vFills, x+len-1, y)) {
 					--len;
 				}
 			}
-#if 1
 			if (vRepeatLen != 1) {
 				if (vRepeatLen > len) {
 					FillInfo fi2;
@@ -212,7 +189,6 @@ void searchFills(
 					vFills.push_back(fi2);
 				}
 			}
-#endif
 			if (len == 1) {
 				// 開始場所が出来るだけ後ろに位置する面に記録する方が、長さのビット数を短く出来るので
 				if (bf.h_ - y < bf.w_ - x) {
@@ -251,10 +227,10 @@ void optimizeFills(
 	uint8_t vMaxLenBitLen = calcNumBits(vMaxLen);
 	for (size_t i=0; i<hFills.size(); ++i) {
 		FillInfo& fi = hFills[i];
-		if (fi.len == 1 || fi.len != hMaxLen) {
+		if (fi.len != hMaxLen) {
 			continue;
 		}
-		do {
+		while (fi.len > 1) {
 			bool bReduced = false;
 			for (size_t j=0; j<vFills.size(); ++j) {
 				FillInfo& vf = vFills[j];
@@ -288,8 +264,58 @@ void optimizeFills(
 			if (!bReduced) {
 				break;
 			}
-		} while (fi.len > 1);
+		}
 	}
+
+	if (vMaxLen == 1) {
+		return;
+	}
+	// 長い縦線の長さを出来るだけ短くする最適化（多分横線の長さの最適化処理と共通化出来るけれど…）
+	for (size_t i=0; i<vFills.size(); ++i) {
+		FillInfo& fi = vFills[i];
+		if (fi.len != vMaxLen) {
+			continue;
+		}
+		// 始点が横線とぶつかっていたら始点をずらす。
+		if (isOverlappingWithFill(hFills, fi.p2, fi.p1)) {
+			++fi.p2;
+			--fi.len;
+		}
+		for (size_t j=0; j<hFills.size(); ++j) {
+			FillInfo& hf = hFills[j];
+			if (fi.p2 == hf.p1) {
+				if (hf.p2+hf.len == fi.p1) { // 始点の左隣に横線が存在したら、その横線を右側に延長出来ないかチェック
+					;
+				}else if (hf.p2-1 == fi.p1) { // 始点の右隣に横線が存在したら、その横線を左側に延長出来ないかチェック
+					uint8_t newLenBits = calcNumBits(hf.len+1);
+					if (newLenBits <= hMaxLenBitLen) {
+						--hf.p2;
+						++hf.len;
+						hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
+						++fi.p2;
+						--fi.len;
+						break;
+					}
+				}
+			}
+			if (fi.p2+fi.len-1 == hf.p1 && hf.p2 != 0) {
+				// 終点の右隣に横線が存在したら、その横線を左側に延長出来ないかチェック
+				uint8_t newLenBits = calcNumBits(hf.len+1);
+				if (newLenBits <= hMaxLenBitLen) {
+					--hf.p2;
+					++hf.len;
+					hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
+					--fi.len;
+					break;
+				}
+			}else if (1) {
+				// 終点の左隣に横線が存在したら、その横線を右側に延長出来ないかチェック
+				
+			}
+		}
+	}
+
+
 }
 
 std::string Encode(const BitmapFont& bf, BitWriter& bw)
