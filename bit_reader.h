@@ -9,10 +9,13 @@ public:
 		src_ = src;
 		initialSrc_ = src;
 		counter_ = 0;
+
+		totalCounter_ = 0;
 	}
 	
 	bool Pop()
 	{
+		++totalCounter_;
 		bool ret = *src_ & (1 << (7-counter_));
 		++counter_;
 		if (counter_ == 8) {
@@ -25,6 +28,7 @@ public:
 	size_t nBytes() const { return (src_ - initialSrc_) + (counter_ ? 1 : 0); }
 	
 private:
+	uint32_t totalCounter_;
 	unsigned char counter_;
 	const uint8_t* src_;
 	const uint8_t* initialSrc_;

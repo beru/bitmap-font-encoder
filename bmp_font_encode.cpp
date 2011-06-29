@@ -16,7 +16,7 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 	return lhs.p1 < rhs.p1;
 }
 
-#if 1
+#if 0
 void encodeNum(BitWriter& bw, uint8_t num, uint8_t nBits)
 {
 	assert(nBits >= 1 && nBits <= 8);
@@ -199,9 +199,9 @@ void encodeNum(BitWriter& bw, uint8_t num, uint8_t maxNum)
 		case 4: bw.Push(0,1,1); break;
 		case 5: bw.Push(1,0,0); break;
 		case 6: bw.Push(1,0,1); break;
-		case 7: bw.Push(1,1,0); break;
-		case 8: bw.Push(1,1,1,0); break;
-		case 9: bw.Push(1,1,1,1); break;
+		case 7: bw.Push(1,1,0,0); break;
+		case 8: bw.Push(1,1,0,1); break;
+		case 9: bw.Push(1,1,1,0); break;
 		case 10: bw.Push(1,1,1,1); break;
 		}break;
 	case 11:
@@ -295,12 +295,12 @@ void encodeNum(BitWriter& bw, uint8_t num, uint8_t maxNum)
 		case 7: bw.Push(0,1,1,0); break;
 		case 8: bw.Push(0,1,1,1); break;
 		case 9: bw.Push(1,0,0,0); break;
-		case 10: bw.Push(1,0,1,0); break;
-		case 11: bw.Push(1,0,1,1); break;
-		case 12: bw.Push(1,1,0,0); break;
-		case 13: bw.Push(1,1,0,1); break;
-		case 14: bw.Push(1,1,1,0); break;
-		case 15: bw.Push(1,1,1,1); break;
+		case 10: bw.Push(1,0,0,1); break;
+		case 11: bw.Push(1,0,1,0); break;
+		case 12: bw.Push(1,0,1,1); break;
+		case 13: bw.Push(1,1,0,0); break;
+		case 14: bw.Push(1,1,0,1); break;
+		case 15: bw.Push(1,1,1,0); break;
 		case 16: bw.Push(1,1,1,1); break;
 		}break;
 	}
@@ -316,14 +316,16 @@ void buildCommands(
 	uint8_t len2
 	)
 {
-	uint8_t maxLen = 0;
+	uint8_t maxLen = 1;
 	for (size_t i=0; i<fills.size(); ++i) {
 		maxLen = std::max(maxLen, fills[i].len);
 	}
 	char buff[32];
 	sprintf(buff, "maxLen(%d)", maxLen);
 	cmds.push_back(buff);
-
+	
+	encodeNum(bw, maxLen, len2);
+	
 	assert(len2 > 0);
 	if (fills.size() == 0) {
 		// ëSïîâ¸çsÅI
@@ -332,7 +334,6 @@ void buildCommands(
 			bw.Push(false);
 		}
 	}else {
-		encodeNum(bw, maxLen, len2);
 		
 		uint8_t x = 0;
 		uint8_t y = 0;
@@ -628,7 +629,7 @@ std::string Encode(const BitmapFont& bf, BitWriter& bw)
 	char buff[32];
 	sprintf(buff, "(%d %d %d %d)", bf.x_, bf.y_, bf.w_, bf.h_);
 	cmds.push_back(buff);
-#if 1
+#if 0
 	encodeNum(bw, bf.x_, 4);
 	encodeNum(bw, bf.y_, 4);
 	assert(bf.w_ != 0 && bf.h_ != 0);
