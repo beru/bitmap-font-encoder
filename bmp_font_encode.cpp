@@ -16,6 +16,7 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 	return lhs.p1 < rhs.p1;
 }
 
+#if 1
 void encodeNum(BitWriter& bw, uint8_t num, uint8_t nBits)
 {
 	assert(nBits >= 1 && nBits <= 8);
@@ -113,6 +114,279 @@ void buildCommands(
 		}
 	}
 }
+
+#else
+void encodeNum(BitWriter& bw, uint8_t num, uint8_t maxNum)
+{
+	assert(maxNum >= 1 && maxNum <= 16);
+	assert(num >= 1 && num <= maxNum);
+	switch (maxNum) {
+	case 1:
+		break;
+	case 2:
+		switch (num) {
+		case 1: bw.Push(0); break;
+		case 2: bw.Push(1); break;
+		}break;
+	case 3:
+		switch (num) {
+		case 1: bw.Push(0); break;
+		case 2: bw.Push(1,0); break;
+		case 3: bw.Push(1,1); break;
+		}break;
+	case 4:
+		switch (num) {
+		case 1: bw.Push(0,0); break;
+		case 2: bw.Push(0,1); break;
+		case 3: bw.Push(1,0); break;
+		case 4: bw.Push(1,1); break;
+		}break;
+	case 5:
+		switch (num) {
+		case 1: bw.Push(0,0); break;
+		case 2: bw.Push(0,1); break;
+		case 3: bw.Push(1,0); break;
+		case 4: bw.Push(1,1,0); break;
+		case 5: bw.Push(1,1,1); break;
+		}break;
+	case 6:
+		switch (num) {
+		case 1: bw.Push(0,0); break;
+		case 2: bw.Push(0,1); break;
+		case 3: bw.Push(1,0,0); break;
+		case 4: bw.Push(1,0,1); break;
+		case 5: bw.Push(1,1,0); break;
+		case 6: bw.Push(1,1,1); break;
+		}break;
+	case 7:
+		switch (num) {
+		case 1: bw.Push(0,0); break;
+		case 2: bw.Push(0,1,0); break;
+		case 3: bw.Push(0,1,1); break;
+		case 4: bw.Push(1,0,0); break;
+		case 5: bw.Push(1,0,1); break;
+		case 6: bw.Push(1,1,0); break;
+		case 7: bw.Push(1,1,1); break;
+		}break;
+	case 8:
+		switch (num) {
+		case 1: bw.Push(0,0,0); break;
+		case 2: bw.Push(0,0,1); break;
+		case 3: bw.Push(0,1,0); break;
+		case 4: bw.Push(0,1,1); break;
+		case 5: bw.Push(1,0,0); break;
+		case 6: bw.Push(1,0,1); break;
+		case 7: bw.Push(1,1,0); break;
+		case 8: bw.Push(1,1,1); break;
+		}break;
+	case 9:
+		switch (num) {
+		case 1: bw.Push(0,0,0); break;
+		case 2: bw.Push(0,0,1); break;
+		case 3: bw.Push(0,1,0); break;
+		case 4: bw.Push(0,1,1); break;
+		case 5: bw.Push(1,0,0); break;
+		case 6: bw.Push(1,0,1); break;
+		case 7: bw.Push(1,1,0); break;
+		case 8: bw.Push(1,1,1,0); break;
+		case 9: bw.Push(1,1,1,1); break;
+		}break;
+	case 10:
+		switch (num) {
+		case 1: bw.Push(0,0,0); break;
+		case 2: bw.Push(0,0,1); break;
+		case 3: bw.Push(0,1,0); break;
+		case 4: bw.Push(0,1,1); break;
+		case 5: bw.Push(1,0,0); break;
+		case 6: bw.Push(1,0,1); break;
+		case 7: bw.Push(1,1,0); break;
+		case 8: bw.Push(1,1,1,0); break;
+		case 9: bw.Push(1,1,1,1); break;
+		case 10: bw.Push(1,1,1,1); break;
+		}break;
+	case 11:
+		switch (num) {
+		case 1: bw.Push(0,0,0); break;
+		case 2: bw.Push(0,0,1); break;
+		case 3: bw.Push(0,1,0); break;
+		case 4: bw.Push(0,1,1); break;
+		case 5: bw.Push(1,0,0); break;
+		case 6: bw.Push(1,0,1,0); break;
+		case 7: bw.Push(1,0,1,1); break;
+		case 8: bw.Push(1,1,0,0); break;
+		case 9: bw.Push(1,1,0,1); break;
+		case 10: bw.Push(1,1,1,0); break;
+		case 11: bw.Push(1,1,1,1); break;
+		}break;
+	case 12:
+		switch (num) {
+		case 1: bw.Push(0,0,0); break;
+		case 2: bw.Push(0,0,1); break;
+		case 3: bw.Push(0,1,0); break;
+		case 4: bw.Push(0,1,1); break;
+		case 5: bw.Push(1,0,0,0); break;
+		case 6: bw.Push(1,0,0,1); break;
+		case 7: bw.Push(1,0,1,0); break;
+		case 8: bw.Push(1,0,1,1); break;
+		case 9: bw.Push(1,1,0,0); break;
+		case 10: bw.Push(1,1,0,1); break;
+		case 11: bw.Push(1,1,1,0); break;
+		case 12: bw.Push(1,1,1,1); break;
+		}break;
+	case 13:
+		switch (num) {
+		case 1: bw.Push(0,0,0); break;
+		case 2: bw.Push(0,0,1); break;
+		case 3: bw.Push(0,1,0); break;
+		case 4: bw.Push(0,1,1,0); break;
+		case 5: bw.Push(0,1,1,1); break;
+		case 6: bw.Push(1,0,0,0); break;
+		case 7: bw.Push(1,0,0,1); break;
+		case 8: bw.Push(1,0,1,0); break;
+		case 9: bw.Push(1,0,1,1); break;
+		case 10: bw.Push(1,1,0,0); break;
+		case 11: bw.Push(1,1,0,1); break;
+		case 12: bw.Push(1,1,1,0); break;
+		case 13: bw.Push(1,1,1,1); break;
+		}break;
+	case 14:
+		switch (num) {
+		case 1: bw.Push(0,0,0); break;
+		case 2: bw.Push(0,0,1); break;
+		case 3: bw.Push(0,1,0,0); break;
+		case 4: bw.Push(0,1,0,1); break;
+		case 5: bw.Push(0,1,1,0); break;
+		case 6: bw.Push(0,1,1,1); break;
+		case 7: bw.Push(1,0,0,0); break;
+		case 8: bw.Push(1,0,0,1); break;
+		case 9: bw.Push(1,0,1,0); break;
+		case 10: bw.Push(1,0,1,1); break;
+		case 11: bw.Push(1,1,0,0); break;
+		case 12: bw.Push(1,1,0,1); break;
+		case 13: bw.Push(1,1,1,0); break;
+		case 14: bw.Push(1,1,1,1); break;
+		}break;
+	case 15:
+		switch (num) {
+		case 1: bw.Push(0,0,0); break;
+		case 2: bw.Push(0,0,1,0); break;
+		case 3: bw.Push(0,0,1,1); break;
+		case 4: bw.Push(0,1,0,0); break;
+		case 5: bw.Push(0,1,0,1); break;
+		case 6: bw.Push(0,1,1,0); break;
+		case 7: bw.Push(0,1,1,1); break;
+		case 8: bw.Push(1,0,0,0); break;
+		case 9: bw.Push(1,0,0,1); break;
+		case 10: bw.Push(1,0,1,0); break;
+		case 11: bw.Push(1,0,1,1); break;
+		case 12: bw.Push(1,1,0,0); break;
+		case 13: bw.Push(1,1,0,1); break;
+		case 14: bw.Push(1,1,1,0); break;
+		case 15: bw.Push(1,1,1,1); break;
+		}break;
+	case 16:
+		switch (num) {
+		case 1: bw.Push(0,0,0,0); break;
+		case 2: bw.Push(0,0,0,1); break;
+		case 3: bw.Push(0,0,1,0); break;
+		case 4: bw.Push(0,0,1,1); break;
+		case 5: bw.Push(0,1,0,0); break;
+		case 6: bw.Push(0,1,0,1); break;
+		case 7: bw.Push(0,1,1,0); break;
+		case 8: bw.Push(0,1,1,1); break;
+		case 9: bw.Push(1,0,0,0); break;
+		case 10: bw.Push(1,0,1,0); break;
+		case 11: bw.Push(1,0,1,1); break;
+		case 12: bw.Push(1,1,0,0); break;
+		case 13: bw.Push(1,1,0,1); break;
+		case 14: bw.Push(1,1,1,0); break;
+		case 15: bw.Push(1,1,1,1); break;
+		case 16: bw.Push(1,1,1,1); break;
+		}break;
+	}
+}
+
+
+static
+void buildCommands(
+	BitWriter& bw,
+	std::vector<std::string>& cmds,
+	const std::vector<FillInfo>& fills,
+	uint8_t len1,
+	uint8_t len2
+	)
+{
+	uint8_t maxLen = 0;
+	for (size_t i=0; i<fills.size(); ++i) {
+		maxLen = std::max(maxLen, fills[i].len);
+	}
+	char buff[32];
+	sprintf(buff, "maxLen(%d)", maxLen);
+	cmds.push_back(buff);
+
+	assert(len2 > 0);
+	if (fills.size() == 0) {
+		// 全部改行！
+		for (uint8_t i=0; i<len1; ++i) {
+			cmds.push_back("newLine");
+			bw.Push(false);
+		}
+	}else {
+		encodeNum(bw, maxLen, len2);
+		
+		uint8_t x = 0;
+		uint8_t y = 0;
+		for (size_t i=0; i<fills.size(); ++i) {
+			// 手前の改行
+			const FillInfo& fi = fills[i];
+			for (uint8_t j=y; j<fi.p1; ++j) {
+				cmds.push_back("newLine");
+				bw.Push(0);
+				x = 0;
+			}
+			y = fi.p1;
+
+			char buff[32];
+			uint8_t offset = fi.p2 - x;
+			sprintf(buff, "fill %d %d", offset, fi.len);
+			cmds.push_back(buff);
+			
+			bw.Push(true); // fill sign
+			uint8_t remain = len2 - fi.p2;
+			if (remain < 2) {
+				if (offset == 0) {
+					// offset == 0 do not record
+				}else {
+					encodeNum(bw, offset+1, len2-x);
+				}
+				assert(fi.len == 1);
+				// len == 1 do not record
+			}else {
+				encodeNum(bw, offset+1, len2-x);
+				encodeNum(bw, fi.len, std::min(maxLen, remain));
+			}
+
+			if (x == 0) {
+				x = fi.p2;
+			}else {
+				x += offset;
+			}
+			x += fi.len + 1;
+
+			// 最後の列の１つ手前まで伸ばしたら、後は改行しか無い。
+			if (fi.p2 + fi.len + 1 >= len2) {
+				++y;
+				x = 0;
+			}
+		}
+		// 後続の改行
+		for (uint8_t i=y; i<len1; ++i) {
+			cmds.push_back("newLine");
+			bw.Push(0);
+		}
+	}
+}
+#endif
 
 bool isOverlappingWithFill(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t p2)
 {
@@ -354,12 +628,19 @@ std::string Encode(const BitmapFont& bf, BitWriter& bw)
 	char buff[32];
 	sprintf(buff, "(%d %d %d %d)", bf.x_, bf.y_, bf.w_, bf.h_);
 	cmds.push_back(buff);
+#if 1
 	encodeNum(bw, bf.x_, 4);
 	encodeNum(bw, bf.y_, 4);
 	assert(bf.w_ != 0 && bf.h_ != 0);
 	encodeNum(bw, bf.w_-1, 4);
 	encodeNum(bw, bf.h_-1, 4);
-	
+#else
+	encodeNum(bw, bf.x_+1, 16);
+	encodeNum(bw, bf.y_+1, 16);
+	assert(bf.w_ != 0 && bf.h_ != 0);
+	encodeNum(bw, bf.w_, 16-bf.x_);
+	encodeNum(bw, bf.h_, 16-bf.y_);
+#endif	
 	buildCommands(bw, cmds, hFills, bf.h_, bf.w_);
 	buildCommands(bw, cmds, vFills, bf.w_, bf.h_);
 	

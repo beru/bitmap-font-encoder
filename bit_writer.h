@@ -30,6 +30,9 @@ public:
 		}
 		++nBits_;
 	}
+	void Push(bool b0, bool b1) { Push(b0); Push(b1); }
+	void Push(bool b0, bool b1, bool b2) { Push(b0); Push(b1); Push(b2); }
+	void Push(bool b0, bool b1, bool b2, bool b3) { Push(b0); Push(b1); Push(b2); Push(b3); }
 	
 	size_t GetNBits() const { return nBits_; }
 	size_t GetNBytes() const { return (dest_ - initialDest_) + (counter_ ? 1 : 0); }
