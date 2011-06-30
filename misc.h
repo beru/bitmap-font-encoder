@@ -46,13 +46,6 @@ void readHexBytes(const char* str, uint8_t* data, size_t nBytes)
 	}
 }
 
-// 1 origin
-inline
-uint8_t calcNumBits(uint8_t len)
-{
-	return (uint8_t) std::ceil(std::log((double)len) / std::log(2.0));
-}
-
 inline
 uint8_t pow2roundup(uint8_t x)
 {
@@ -64,11 +57,48 @@ uint8_t pow2roundup(uint8_t x)
 }
 
 inline
-uint8_t countBits(uint8_t n)
+uint8_t countBits32(uint32_t n)
+{
+	n = ((n & 0xAAAAAAAA) >>  1) + (n & 0x55555555);
+	n = ((n & 0xCCCCCCCC) >>  2) + (n & 0x33333333);
+	n = ((n & 0xF0F0F0F0) >>  4) + (n & 0x0F0F0F0F);
+	n = ((n & 0xFF00FF00) >>  8) + (n & 0x00FF00FF);
+	n = ((n & 0xFFFF0000) >> 16) + (n & 0x0000FFFF);
+	return n;
+}
+
+inline
+uint8_t countBits16(uint16_t n)
+{
+	n = (unsigned short)( ((n & 0xAAAA) >> 1) + (n & 0x5555) );
+	n = (unsigned short)( ((n & 0xCCCC) >> 2) + (n & 0x3333) );
+	n = (unsigned short)( ((n & 0xF0F0) >> 4) + (n & 0x0F0F) );
+	n = (unsigned short)( ((n & 0xFF00) >> 8) + (n & 0x00FF) );
+	return n;
+}
+
+inline
+uint8_t countBits8(uint8_t n)
 {
 	n = (uint8_t)( ((n & 0xAA) >> 1) + (n & 0x55) );
 	n = (uint8_t)( ((n & 0xCC) >> 2) + (n & 0x33) );
 	n = (uint8_t)( ((n & 0xF0) >> 4) + (n & 0x0F) );
 	return n;
+}
+
+/*
+inline
+uint8_t ntz(uint8_t n)
+{
+	int x = n;
+	return countBits8((x&(-x))-1);
+}
+*/
+
+inline
+uint8_t ntz(uint16_t n)
+{
+	int x = n;
+	return countBits16((x&(-x))-1);
 }
 

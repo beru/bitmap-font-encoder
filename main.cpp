@@ -23,7 +23,7 @@ void printByteBits(FILE* f, uint8_t b)
 int main(int argc, char* argv[])
 {
 	if (argc < 2) {
-		printf("usage : imacat2aa bdf_filename\r\n");
+		printf("usage : bitmap_font_encoder bdf_filename\r\n");
 		return 1;
 	}
 
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
 		bitWriter.Set(&dest[0]);
 		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-//		const wchar_t* str = L"ニ";
+//		const wchar_t* str = L"入";
 //		const wchar_t* str = L"信非人出力間止意説明書的差現用切押加値点電圧気能設等";
 //		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
 #if 1
@@ -81,6 +81,7 @@ int main(int argc, char* argv[])
 			L"前後通信非入出力確認間初期防無効禁止容注意取扱説明書極性番的差現使用害切替損傷最大動押増加項数値点滅電源圧流気接続能表示設定誤操作等荷演算解除総重量軸画字絹風袋線兆億万千百十九八七六五四三二一＝】計測機器端麗辛口"
 			L"ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをん"
 			L"ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ"
+			L"。．、，"
 		;
 #endif
 		BitmapFont bmpFont;
@@ -115,7 +116,7 @@ int main(int argc, char* argv[])
 			fprintf(of, "num of bits : %d\r\n", bitWriter.GetNBits()-oldNBits);
 		}
 
-#if 0
+#if 1
 		bmpFont.Init(1,1);
 		for (size_t i=0; i<wcslen(str); ++i) {
 			Decode(bmpFont, bitReader);

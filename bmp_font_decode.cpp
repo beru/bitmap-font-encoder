@@ -17,7 +17,7 @@ uint8_t decodeNum(BitReader& br, uint8_t maxNum)
 		return 0;
 	}
 	uint8_t p2 = pow2roundup(maxNum);
-	uint8_t nBits = countBits(p2-1)-1;
+	uint8_t nBits = countBits8(p2-1)-1;
 	uint8_t ret = 0;
 	for (uint8_t i=0; i<nBits; ++i) {
 		ret |= br.Pop() << (nBits-1-i);
@@ -38,16 +38,18 @@ void decodeFills(
 	uint8_t len2	// —ñ•ûŒü‚Ì’·‚³
 	)
 {
+	uint16_t lineFlags = 0;
+	for (uint8_t i=0; i<len1; ++i) {
+		lineFlags |= br.Pop() << i;
+	}
+	if (!lineFlags) {
+		return;
+	}
 	uint8_t maxLen = decodeNum(br, len2)+1;
-	uint8_t row = 0;
+	uint8_t row = ntz(lineFlags);
+	
 	uint8_t col = 0;
-	while (row < len1) {
-		bool b = br.Pop();
-		if (!b) {
-			++row;
-			col = 0;
-			continue;
-		}
+	do {
 		uint8_t offset;
 		uint8_t fillLen;
 		if (col == 0) {
@@ -59,6 +61,12 @@ void decodeFills(
 				fillLen = decodeNum(br, std::min(maxLen, (uint8_t)(len2-offset))) + 1;
 			}
 		}else {
+			bool b = br.Pop();
+			if (!b) {
+				row += ntz(lineFlags >> (row+1)) + 1;
+				col = 0;
+				continue;
+			}
 			uint8_t diff = len2 - col;
 			if (diff == 1) {
 				offset = 0;
@@ -79,10 +87,14 @@ void decodeFills(
 		fills.push_back(fi);
 		col += offset + fillLen + 1;
 		if (col >= len2) {
-			++row;
+			if (row == len1-1) {
+				++row;
+			}else {
+				row += ntz(lineFlags >> (row+1)) + 1;
+			}
 			col = 0;
 		}
-	}
+	}while (row < len1);
 }
 
 void Decode(BitmapFont& bf, BitReader& br)

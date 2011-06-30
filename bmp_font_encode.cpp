@@ -25,12 +25,12 @@ void encodeNum(BitWriter& bw, uint8_t n, uint8_t m)
 	}
 	uint8_t p2 = pow2roundup(m);
 	if (n < p2-m) {
-		uint8_t nBits = countBits(p2-1)-1;
+		uint8_t nBits = countBits8(p2-1)-1;
 		for (uint8_t i=0; i<nBits; ++i) {
 			bw.Push((n >> (nBits-1-i)) & 1);
 		}
 	}else {
-		uint8_t nBits = countBits(p2-1);
+		uint8_t nBits = countBits8(p2-1);
 		n += p2 - m;
 		for (uint8_t i=0; i<nBits; ++i) {
 			bw.Push((n >> (nBits-1-i)) & 1);
@@ -59,16 +59,16 @@ void buildCommands(
 	}
 	
 	// ãÛçsÇ©Ç«Ç§Ç©ÇÃãLò^
-	bool lineFlags[16] = {false};
+	uint16_t lineFlags = 0;
 	uint8_t maxLen = 1;
 	for (size_t i=0; i<fills.size(); ++i) {
 		const FillInfo& fi = fills[i];
 		maxLen = std::max(maxLen, fi.len);
-		lineFlags[fi.p1] = true;
+		lineFlags |= 1 << fi.p1;
 	}
 	for (uint8_t i=0; i<len1; ++i) {
-		bw.Push(lineFlags[i]);
-		if (lineFlags[i]) {
+		bw.Push(lineFlags & (1<<i));
+		if (lineFlags & (1<<i)) {
 			cmds.push_back("row 1");
 		}else {
 			cmds.push_back("row 0");
@@ -121,7 +121,7 @@ void buildCommands(
 		}
 		col += fi.len + 1;
 	}
-	if (col+1 < len2) {
+	if (col < len2) {
 		bw.Push(false);
 		cmds.push_back("next line");
 	}
@@ -303,6 +303,13 @@ void searchFills(
 		}
 		++idx0;
 	}
+}
+
+// 1 origin
+inline
+uint8_t calcNumBits(uint8_t len)
+{
+	return (uint8_t) std::ceil(std::log((double)len) / std::log(2.0));
 }
 
 void optimizeFills(
