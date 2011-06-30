@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
 		bitWriter.Set(&dest[0]);
 		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-//		const wchar_t* str = L"二";
+//		const wchar_t* str = L"ニ";
 //		const wchar_t* str = L"信非人出力間止意説明書的差現用切押加値点電圧気能設等";
 //		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
 #if 1
@@ -115,7 +115,7 @@ int main(int argc, char* argv[])
 			fprintf(of, "num of bits : %d\r\n", bitWriter.GetNBits()-oldNBits);
 		}
 
-#if 1
+#if 0
 		bmpFont.Init(1,1);
 		for (size_t i=0; i<wcslen(str); ++i) {
 			Decode(bmpFont, bitReader);

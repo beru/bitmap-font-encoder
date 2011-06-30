@@ -16,14 +16,29 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 	return lhs.p1 < rhs.p1;
 }
 
-#if 0
-void encodeNum(BitWriter& bw, uint8_t num, uint8_t nBits)
+void encodeNum(BitWriter& bw, uint8_t n, uint8_t m)
 {
-	assert(nBits >= 1 && nBits <= 8);
-	for (uint8_t i=0; i<nBits; ++i) {
-		bw.Push( (num >> i) & 1 );
+	assert(m >= 1 && m <= 16);
+	assert(n >= 0 && n < m);
+	if (m == 1) {
+		return;
+	}
+	uint8_t p2 = pow2roundup(m);
+	if (n < p2-m) {
+		uint8_t nBits = countBits(p2-1)-1;
+		for (uint8_t i=0; i<nBits; ++i) {
+			bw.Push((n >> (nBits-1-i)) & 1);
+		}
+	}else {
+		uint8_t nBits = countBits(p2-1);
+		n += p2 - m;
+		for (uint8_t i=0; i<nBits; ++i) {
+			bw.Push((n >> (nBits-1-i)) & 1);
+		}
 	}
 }
+
+#if 1
 
 static
 void buildCommands(
@@ -34,278 +49,85 @@ void buildCommands(
 	uint8_t len2
 	)
 {
-	uint8_t maxLen = 0;
-	for (size_t i=0; i<fills.size(); ++i) {
-		maxLen = std::max(maxLen, fills[i].len);
-	}
-	char buff[32];
-	sprintf(buff, "maxLen(%d)", maxLen);
-	cmds.push_back(buff);
-
-	const uint8_t posBitLen = calcNumBits(len2);
-	const uint8_t lenBitLen = std::max((uint8_t)1, calcNumBits(maxLen));
-	encodeNum(bw, lenBitLen-1, 2);
-	
-	assert(len2 > 0);
 	if (fills.size() == 0) {
 		// 全部改行！
 		for (uint8_t i=0; i<len1; ++i) {
-			cmds.push_back("newLine");
+			cmds.push_back("row 0");
 			bw.Push(false);
 		}
-	}else {
-		uint8_t x = 0;
-		uint8_t y = 0;
-		for (size_t i=0; i<fills.size(); ++i) {
-			// 手前の改行
-			const FillInfo& fi = fills[i];
-			for (uint8_t i=y; i<fi.p1; ++i) {
-				cmds.push_back("newLine");
-				bw.Push(0);
-				x = 0;
-			}
-			y = fi.p1;
-
-			char buff[32];
-			uint8_t offset = fi.p2 - x;
-			sprintf(buff, "fill %d %d", offset, fi.len);
-			cmds.push_back(buff);
-			
-			bw.Push(true);
-			uint8_t diff = len2 - fi.p2;
-			uint8_t lenBits = std::min(lenBitLen, calcNumBits(diff));
-			if (lenBits == 0) {
-				if (offset == 0) {
-					// offset == 0 do not record
-				}else {
-					if (x == 0) {
-						encodeNum(bw, offset, posBitLen);
-					}else {
-						encodeNum(bw, offset, std::min(posBitLen, calcNumBits(len2 - x)));
-					}
-				}
-				assert(fi.len == 1);
-				// len == 1 do not record
-			}else {
-				if (x == 0) {
-					encodeNum(bw, fi.p2, posBitLen);
-				}else {
-					encodeNum(bw, offset, std::min(posBitLen, calcNumBits(len2-x)));
-				}
-				encodeNum(bw, fi.len-1, lenBits);
-			}
-
-			if (x == 0) {
-				x = fi.p2;
-			}else {
-				x += offset;
-			}
-			x += fi.len + 1;
-
-			if (fi.p2 + fi.len >= len2-1) {
-				++y;
-				x = 0;
-			}
+		return;
+	}
+	
+	// 空行かどうかの記録
+	bool lineFlags[16] = {false};
+	uint8_t maxLen = 1;
+	for (size_t i=0; i<fills.size(); ++i) {
+		const FillInfo& fi = fills[i];
+		maxLen = std::max(maxLen, fi.len);
+		lineFlags[fi.p1] = true;
+	}
+	for (uint8_t i=0; i<len1; ++i) {
+		bw.Push(lineFlags[i]);
+		if (lineFlags[i]) {
+			cmds.push_back("row 1");
+		}else {
+			cmds.push_back("row 0");
 		}
-		// 後続の改行
-		for (uint8_t i=y; i<len1; ++i) {
-			cmds.push_back("newLine");
-			bw.Push(0);
+	}
+	// 最大線長の記録
+	char buff[32];
+	sprintf(buff, "max line length : %d", maxLen);
+	cmds.push_back(buff);
+	encodeNum(bw, maxLen-1, len2);
+	
+	uint8_t col = 0;
+	uint8_t row = fills[0].p1;
+	for (size_t i=0; i<fills.size(); ++i) {
+		const FillInfo& fi = fills[i];
+		if (row != fi.p1) {
+			if (col < len2) {
+				bw.Push(false);
+				cmds.push_back("next line");
+			}
+			col = 0;
 		}
+		row = fi.p1;
+		char buff[32];
+		uint8_t offset = fi.p2 - col;
+		sprintf(buff, "fill %d %d", offset, fi.len);
+		cmds.push_back(buff);
+		
+		if (col != 0) {
+			bw.Push(true); // fill sign
+		}
+		uint8_t remain = len2 - fi.p2;
+		if (remain < 2) {
+			if (offset == 0) {
+				// offset == 0 do not record
+			}else {
+				encodeNum(bw, offset, len2-col);
+			}
+			assert(fi.len == 1);
+			// len == 1 do not record
+		}else {
+			encodeNum(bw, offset, len2-col);
+			encodeNum(bw, fi.len-1, std::min(maxLen, remain));
+		}
+
+		if (col == 0) {
+			col = fi.p2;
+		}else {
+			col += offset;
+		}
+		col += fi.len + 1;
+	}
+	if (col+1 < len2) {
+		bw.Push(false);
+		cmds.push_back("next line");
 	}
 }
 
 #else
-void encodeNum(BitWriter& bw, uint8_t num, uint8_t maxNum)
-{
-	assert(maxNum >= 1 && maxNum <= 16);
-	assert(num >= 1 && num <= maxNum);
-	switch (maxNum) {
-	case 1:
-		break;
-	case 2:
-		switch (num) {
-		case 1: bw.Push(0); break;
-		case 2: bw.Push(1); break;
-		}break;
-	case 3:
-		switch (num) {
-		case 1: bw.Push(0); break;
-		case 2: bw.Push(1,0); break;
-		case 3: bw.Push(1,1); break;
-		}break;
-	case 4:
-		switch (num) {
-		case 1: bw.Push(0,0); break;
-		case 2: bw.Push(0,1); break;
-		case 3: bw.Push(1,0); break;
-		case 4: bw.Push(1,1); break;
-		}break;
-	case 5:
-		switch (num) {
-		case 1: bw.Push(0,0); break;
-		case 2: bw.Push(0,1); break;
-		case 3: bw.Push(1,0); break;
-		case 4: bw.Push(1,1,0); break;
-		case 5: bw.Push(1,1,1); break;
-		}break;
-	case 6:
-		switch (num) {
-		case 1: bw.Push(0,0); break;
-		case 2: bw.Push(0,1); break;
-		case 3: bw.Push(1,0,0); break;
-		case 4: bw.Push(1,0,1); break;
-		case 5: bw.Push(1,1,0); break;
-		case 6: bw.Push(1,1,1); break;
-		}break;
-	case 7:
-		switch (num) {
-		case 1: bw.Push(0,0); break;
-		case 2: bw.Push(0,1,0); break;
-		case 3: bw.Push(0,1,1); break;
-		case 4: bw.Push(1,0,0); break;
-		case 5: bw.Push(1,0,1); break;
-		case 6: bw.Push(1,1,0); break;
-		case 7: bw.Push(1,1,1); break;
-		}break;
-	case 8:
-		switch (num) {
-		case 1: bw.Push(0,0,0); break;
-		case 2: bw.Push(0,0,1); break;
-		case 3: bw.Push(0,1,0); break;
-		case 4: bw.Push(0,1,1); break;
-		case 5: bw.Push(1,0,0); break;
-		case 6: bw.Push(1,0,1); break;
-		case 7: bw.Push(1,1,0); break;
-		case 8: bw.Push(1,1,1); break;
-		}break;
-	case 9:
-		switch (num) {
-		case 1: bw.Push(0,0,0); break;
-		case 2: bw.Push(0,0,1); break;
-		case 3: bw.Push(0,1,0); break;
-		case 4: bw.Push(0,1,1); break;
-		case 5: bw.Push(1,0,0); break;
-		case 6: bw.Push(1,0,1); break;
-		case 7: bw.Push(1,1,0); break;
-		case 8: bw.Push(1,1,1,0); break;
-		case 9: bw.Push(1,1,1,1); break;
-		}break;
-	case 10:
-		switch (num) {
-		case 1: bw.Push(0,0,0); break;
-		case 2: bw.Push(0,0,1); break;
-		case 3: bw.Push(0,1,0); break;
-		case 4: bw.Push(0,1,1); break;
-		case 5: bw.Push(1,0,0); break;
-		case 6: bw.Push(1,0,1); break;
-		case 7: bw.Push(1,1,0,0); break;
-		case 8: bw.Push(1,1,0,1); break;
-		case 9: bw.Push(1,1,1,0); break;
-		case 10: bw.Push(1,1,1,1); break;
-		}break;
-	case 11:
-		switch (num) {
-		case 1: bw.Push(0,0,0); break;
-		case 2: bw.Push(0,0,1); break;
-		case 3: bw.Push(0,1,0); break;
-		case 4: bw.Push(0,1,1); break;
-		case 5: bw.Push(1,0,0); break;
-		case 6: bw.Push(1,0,1,0); break;
-		case 7: bw.Push(1,0,1,1); break;
-		case 8: bw.Push(1,1,0,0); break;
-		case 9: bw.Push(1,1,0,1); break;
-		case 10: bw.Push(1,1,1,0); break;
-		case 11: bw.Push(1,1,1,1); break;
-		}break;
-	case 12:
-		switch (num) {
-		case 1: bw.Push(0,0,0); break;
-		case 2: bw.Push(0,0,1); break;
-		case 3: bw.Push(0,1,0); break;
-		case 4: bw.Push(0,1,1); break;
-		case 5: bw.Push(1,0,0,0); break;
-		case 6: bw.Push(1,0,0,1); break;
-		case 7: bw.Push(1,0,1,0); break;
-		case 8: bw.Push(1,0,1,1); break;
-		case 9: bw.Push(1,1,0,0); break;
-		case 10: bw.Push(1,1,0,1); break;
-		case 11: bw.Push(1,1,1,0); break;
-		case 12: bw.Push(1,1,1,1); break;
-		}break;
-	case 13:
-		switch (num) {
-		case 1: bw.Push(0,0,0); break;
-		case 2: bw.Push(0,0,1); break;
-		case 3: bw.Push(0,1,0); break;
-		case 4: bw.Push(0,1,1,0); break;
-		case 5: bw.Push(0,1,1,1); break;
-		case 6: bw.Push(1,0,0,0); break;
-		case 7: bw.Push(1,0,0,1); break;
-		case 8: bw.Push(1,0,1,0); break;
-		case 9: bw.Push(1,0,1,1); break;
-		case 10: bw.Push(1,1,0,0); break;
-		case 11: bw.Push(1,1,0,1); break;
-		case 12: bw.Push(1,1,1,0); break;
-		case 13: bw.Push(1,1,1,1); break;
-		}break;
-	case 14:
-		switch (num) {
-		case 1: bw.Push(0,0,0); break;
-		case 2: bw.Push(0,0,1); break;
-		case 3: bw.Push(0,1,0,0); break;
-		case 4: bw.Push(0,1,0,1); break;
-		case 5: bw.Push(0,1,1,0); break;
-		case 6: bw.Push(0,1,1,1); break;
-		case 7: bw.Push(1,0,0,0); break;
-		case 8: bw.Push(1,0,0,1); break;
-		case 9: bw.Push(1,0,1,0); break;
-		case 10: bw.Push(1,0,1,1); break;
-		case 11: bw.Push(1,1,0,0); break;
-		case 12: bw.Push(1,1,0,1); break;
-		case 13: bw.Push(1,1,1,0); break;
-		case 14: bw.Push(1,1,1,1); break;
-		}break;
-	case 15:
-		switch (num) {
-		case 1: bw.Push(0,0,0); break;
-		case 2: bw.Push(0,0,1,0); break;
-		case 3: bw.Push(0,0,1,1); break;
-		case 4: bw.Push(0,1,0,0); break;
-		case 5: bw.Push(0,1,0,1); break;
-		case 6: bw.Push(0,1,1,0); break;
-		case 7: bw.Push(0,1,1,1); break;
-		case 8: bw.Push(1,0,0,0); break;
-		case 9: bw.Push(1,0,0,1); break;
-		case 10: bw.Push(1,0,1,0); break;
-		case 11: bw.Push(1,0,1,1); break;
-		case 12: bw.Push(1,1,0,0); break;
-		case 13: bw.Push(1,1,0,1); break;
-		case 14: bw.Push(1,1,1,0); break;
-		case 15: bw.Push(1,1,1,1); break;
-		}break;
-	case 16:
-		switch (num) {
-		case 1: bw.Push(0,0,0,0); break;
-		case 2: bw.Push(0,0,0,1); break;
-		case 3: bw.Push(0,0,1,0); break;
-		case 4: bw.Push(0,0,1,1); break;
-		case 5: bw.Push(0,1,0,0); break;
-		case 6: bw.Push(0,1,0,1); break;
-		case 7: bw.Push(0,1,1,0); break;
-		case 8: bw.Push(0,1,1,1); break;
-		case 9: bw.Push(1,0,0,0); break;
-		case 10: bw.Push(1,0,0,1); break;
-		case 11: bw.Push(1,0,1,0); break;
-		case 12: bw.Push(1,0,1,1); break;
-		case 13: bw.Push(1,1,0,0); break;
-		case 14: bw.Push(1,1,0,1); break;
-		case 15: bw.Push(1,1,1,0); break;
-		case 16: bw.Push(1,1,1,1); break;
-		}break;
-	}
-}
-
 
 static
 void buildCommands(
@@ -324,7 +146,7 @@ void buildCommands(
 	sprintf(buff, "maxLen(%d)", maxLen);
 	cmds.push_back(buff);
 	
-	encodeNum(bw, maxLen, len2);
+	encodeNum(bw, maxLen-1, len2);
 	
 	assert(len2 > 0);
 	if (fills.size() == 0) {
@@ -358,13 +180,13 @@ void buildCommands(
 				if (offset == 0) {
 					// offset == 0 do not record
 				}else {
-					encodeNum(bw, offset+1, len2-x);
+					encodeNum(bw, offset, len2-x);
 				}
 				assert(fi.len == 1);
 				// len == 1 do not record
 			}else {
-				encodeNum(bw, offset+1, len2-x);
-				encodeNum(bw, fi.len, std::min(maxLen, remain));
+				encodeNum(bw, offset, len2-x);
+				encodeNum(bw, fi.len-1, std::min(maxLen, remain));
 			}
 
 			if (x == 0) {
@@ -387,6 +209,7 @@ void buildCommands(
 		}
 	}
 }
+
 #endif
 
 bool isOverlappingWithFill(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t p2)
@@ -605,7 +428,6 @@ void optimizeFills(
 					if (newLenBits <= hMaxLenBitLen) {
 						++hf.len;
 						hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
-						++fi.p2;
 						--fi.len;
 					}
 				}
@@ -629,19 +451,13 @@ std::string Encode(const BitmapFont& bf, BitWriter& bw)
 	char buff[32];
 	sprintf(buff, "(%d %d %d %d)", bf.x_, bf.y_, bf.w_, bf.h_);
 	cmds.push_back(buff);
-#if 0
-	encodeNum(bw, bf.x_, 4);
-	encodeNum(bw, bf.y_, 4);
+
+	encodeNum(bw, bf.x_, 16);
+	encodeNum(bw, bf.y_, 16);
 	assert(bf.w_ != 0 && bf.h_ != 0);
-	encodeNum(bw, bf.w_-1, 4);
-	encodeNum(bw, bf.h_-1, 4);
-#else
-	encodeNum(bw, bf.x_+1, 16);
-	encodeNum(bw, bf.y_+1, 16);
-	assert(bf.w_ != 0 && bf.h_ != 0);
-	encodeNum(bw, bf.w_, 16-bf.x_);
-	encodeNum(bw, bf.h_, 16-bf.y_);
-#endif	
+	encodeNum(bw, 16-(bf.x_+bf.w_), 16-bf.x_);
+	encodeNum(bw, 16-(bf.y_+bf.h_), 16-bf.y_);
+
 	buildCommands(bw, cmds, hFills, bf.h_, bf.w_);
 	buildCommands(bw, cmds, vFills, bf.w_, bf.h_);
 	

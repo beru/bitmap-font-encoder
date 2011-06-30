@@ -52,3 +52,23 @@ uint8_t calcNumBits(uint8_t len)
 {
 	return (uint8_t) std::ceil(std::log((double)len) / std::log(2.0));
 }
+
+inline
+uint8_t pow2roundup(uint8_t x)
+{
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    return x+1;
+}
+
+inline
+uint8_t countBits(uint8_t n)
+{
+	n = (uint8_t)( ((n & 0xAA) >> 1) + (n & 0x55) );
+	n = (uint8_t)( ((n & 0xCC) >> 2) + (n & 0x33) );
+	n = (uint8_t)( ((n & 0xF0) >> 4) + (n & 0x0F) );
+	return n;
+}
+
