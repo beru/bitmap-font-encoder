@@ -16,6 +16,14 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 	return lhs.p1 < rhs.p1;
 }
 
+void unaryEncode(BitWriter& bw, uint8_t n)
+{
+	for (uint8_t i=0; i<n; ++i) {
+		bw.Push(1);
+	}
+	bw.Push(0);
+}
+
 void encodeNum(BitWriter& bw, uint8_t n, uint8_t m)
 {
 	assert(m >= 1 && m <= 16);
@@ -38,7 +46,20 @@ void encodeNum(BitWriter& bw, uint8_t n, uint8_t m)
 	}
 }
 
-#if 1
+uint8_t calcEncodedLen(uint8_t n, uint8_t m)
+{
+	assert(n >= 0 && n < m);
+	if (m == 1) {
+		return 0;
+	}
+	uint8_t p2 = pow2roundup(m);
+	uint8_t nBits = countBits8(p2-1);
+	if (n < p2-m) {
+		return nBits - 1;
+	}else {
+		return nBits;
+	}
+}
 
 static
 void buildCommands(
@@ -46,7 +67,7 @@ void buildCommands(
 	std::vector<std::string>& cmds,
 	const std::vector<FillInfo>& fills,
 	uint8_t len1,
-	uint8_t len2
+	const uint8_t* len2s
 	)
 {
 	if (fills.size() == 0) {
@@ -78,20 +99,25 @@ void buildCommands(
 	char buff[32];
 	sprintf(buff, "max line length : %d", maxLen);
 	cmds.push_back(buff);
-	encodeNum(bw, maxLen-1, len2);
+	uint8_t maxLen2 = 0;
+	for (uint8_t i=0; i<len1; ++i) {
+		maxLen2 = std::max(maxLen2, len2s[i]);
+	}
+	encodeNum(bw, maxLen-1, maxLen2);
 	
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
 		const FillInfo& fi = fills[i];
 		if (row != fi.p1) {
-			if (col < len2) {
+			if (col < len2s[row]) {
 				bw.Push(false);
 				cmds.push_back("next line");
 			}
 			col = 0;
 		}
 		row = fi.p1;
+		uint8_t len2 = len2s[row];
 		char buff[32];
 		uint8_t offset = fi.p2 - col;
 		sprintf(buff, "fill %d %d", offset, fi.len);
@@ -121,96 +147,11 @@ void buildCommands(
 		}
 		col += fi.len + 1;
 	}
-	if (col < len2) {
+	if (col < len2s[row]) {
 		bw.Push(false);
 		cmds.push_back("next line");
 	}
 }
-
-#else
-
-static
-void buildCommands(
-	BitWriter& bw,
-	std::vector<std::string>& cmds,
-	const std::vector<FillInfo>& fills,
-	uint8_t len1,
-	uint8_t len2
-	)
-{
-	uint8_t maxLen = 1;
-	for (size_t i=0; i<fills.size(); ++i) {
-		maxLen = std::max(maxLen, fills[i].len);
-	}
-	char buff[32];
-	sprintf(buff, "maxLen(%d)", maxLen);
-	cmds.push_back(buff);
-	
-	encodeNum(bw, maxLen-1, len2);
-	
-	assert(len2 > 0);
-	if (fills.size() == 0) {
-		// 全部改行！
-		for (uint8_t i=0; i<len1; ++i) {
-			cmds.push_back("newLine");
-			bw.Push(false);
-		}
-	}else {
-		
-		uint8_t x = 0;
-		uint8_t y = 0;
-		for (size_t i=0; i<fills.size(); ++i) {
-			// 手前の改行
-			const FillInfo& fi = fills[i];
-			for (uint8_t j=y; j<fi.p1; ++j) {
-				cmds.push_back("newLine");
-				bw.Push(0);
-				x = 0;
-			}
-			y = fi.p1;
-
-			char buff[32];
-			uint8_t offset = fi.p2 - x;
-			sprintf(buff, "fill %d %d", offset, fi.len);
-			cmds.push_back(buff);
-			
-			bw.Push(true); // fill sign
-			uint8_t remain = len2 - fi.p2;
-			if (remain < 2) {
-				if (offset == 0) {
-					// offset == 0 do not record
-				}else {
-					encodeNum(bw, offset, len2-x);
-				}
-				assert(fi.len == 1);
-				// len == 1 do not record
-			}else {
-				encodeNum(bw, offset, len2-x);
-				encodeNum(bw, fi.len-1, std::min(maxLen, remain));
-			}
-
-			if (x == 0) {
-				x = fi.p2;
-			}else {
-				x += offset;
-			}
-			x += fi.len + 1;
-
-			// 最後の列の１つ手前まで伸ばしたら、後は改行しか無い。
-			if (fi.p2 + fi.len + 1 >= len2) {
-				++y;
-				x = 0;
-			}
-		}
-		// 後続の改行
-		for (uint8_t i=y; i<len1; ++i) {
-			cmds.push_back("newLine");
-			bw.Push(0);
-		}
-	}
-}
-
-#endif
 
 bool isOverlappingWithFill(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t p2)
 {
@@ -226,247 +167,324 @@ bool isOverlappingWithFill(const std::vector<FillInfo>& fills, uint8_t p1, uint8
 	return false;
 }
 
+#define PIXEL_X 2
+#define PIXEL_Y 4
+
+bool isLineFullfilled(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t w)
+{
+	for (size_t i=0; i<fills.size(); ++i) {
+		const FillInfo& fi = fills[i];
+		if (fi.p1 == p1 && fi.len == w) {
+			return true;
+		}
+	}
+	return false;
+}
+
+uint8_t findXRepeatLength(const Array2D<uint8_t>& values, uint8_t x, uint8_t y)
+{
+	if (!values[y][x]) {
+		return 0;
+	}
+	uint8_t len = 1;
+	for (int i=x-1; i!=-1; --i) {
+		if (!values[y][i]) {
+			break;
+		}
+		++len;
+	}
+	for (int i=x+1; i<values.GetWidth(); ++i) {
+		if (!values[y][i]) {
+			break;
+		}
+		++len;
+	}
+}
+
+uint8_t findYRepeatLength(const Array2D<uint8_t>& values, uint8_t x, uint8_t y)
+{
+	if (!values[y][x]) {
+		return 0;
+	}
+	uint8_t len = 1;
+	for (int i=y-1; i!=-1; --i) {
+		if (!values[i][x]) {
+			break;
+		}
+		++len;
+	}
+	for (int i=y+1; i<values.GetHeight(); ++i) {
+		if (!values[i][x]) {
+			break;
+		}
+		++len;
+	}
+	return len;
+}
+
 void searchFills(
-	const BitmapFont& bf,
+	Array2D<uint8_t>& values,
 	std::vector<FillInfo>& hFills,
-	std::vector<FillInfo>& vFills
+	std::vector<FillInfo>& vFills,
+	uint8_t* vlens
 	)
 {
-	size_t idx0 = 0;
-	FillInfo fi;
-	for (uint8_t y=0; y<bf.h_; ++y) {
-		for (uint8_t x=0; x<bf.w_; ++x) {
-			if (!bf.values_[idx0][x]) {
-				continue;
-			}
-			fi.p1 = y;
-			fi.p2 = x;
-			
-			if (isOverlappingWithFill(vFills, x, y)) {
-				continue;
-			}
-			// if not last row
-			uint8_t vRepeatLen = 1;
-			if (y != bf.h_ - 1) {
-				// find vertical repeat
-				for (uint8_t y2=y+1; y2<bf.h_; ++y2) {
-					if (!bf.values_[y2][x]) {
-						break;
-					}
-					++vRepeatLen;
-				}
-			}
-			uint8_t len = 1;
-			// if last column
-			if (x != bf.w_ - 1) {
-				// find horizontal repeat
-				for (uint8_t x2=x+1; x2<bf.w_; ++x2) {
-					if (!bf.values_[idx0][x2]) {
-						break;
-					}
-					++len;
-				}
-				// 線の末尾が縦方向の線と重なる場合は長さを短くする
-				if (len > 1 && isOverlappingWithFill(vFills, x+len-1, y)) {
-					--len;
-				}
-			}
-			if (vRepeatLen != 1) {
-				if (vRepeatLen > len) {
-					FillInfo fi2;
-					fi2.p1 = x;
-					fi2.p2 = y;
-					fi2.len = vRepeatLen;
-					vFills.push_back(fi2);
-					continue;
-				}else {
-					FillInfo fi2;
-					fi2.p1 = x;
-					fi2.p2 = y + 1;
-					fi2.len = vRepeatLen - 1;
-					vFills.push_back(fi2);
-				}
-			}
-			if (len == 1) {
-				// 開始場所が出来るだけ後ろに位置する面に記録する方が、長さのビット数を短く出来るので
-				if (bf.h_ - y < bf.w_ - x) {
-					fi.p1 = x;
-					fi.p2 = y;
-					fi.len = 1;
-					vFills.push_back(fi);
-					continue;
-				}
-			}
-			fi.len = len;
-			hFills.push_back(fi);
-			x += len - 1;
-		}
-		++idx0;
-	}
-}
-
-// 1 origin
-inline
-uint8_t calcNumBits(uint8_t len)
-{
-	return (uint8_t) std::ceil(std::log((double)len) / std::log(2.0));
-}
-
-void optimizeFills(
-	std::vector<FillInfo>& hFills,
-	std::vector<FillInfo>& vFills
-	)
-{
-	// 長い横線の端を縦線に移動して長さを出来るだけ短くする最適化
-	uint8_t hMaxLen = 0;
-	uint8_t vMaxLen = 0;
-	for (size_t i=0; i<hFills.size(); ++i) {
-		const FillInfo& fi = hFills[i];
-		hMaxLen = std::max(hMaxLen, fi.len);
-	}
-	for (size_t i=0; i<vFills.size(); ++i) {
-		const FillInfo& fi = vFills[i];
-		vMaxLen = std::max(vMaxLen, fi.len);
-	}
-	uint8_t hMaxLenBitLen = calcNumBits(hMaxLen);
-	uint8_t vMaxLenBitLen = calcNumBits(vMaxLen);
-	for (size_t i=0; i<hFills.size(); ++i) {
-		FillInfo& fi = hFills[i];
-		if (fi.len != hMaxLen) {
-			continue;
-		}
-		while (fi.len > 1) {
-			bool bReduced = false;
-			for (size_t j=0; j<vFills.size(); ++j) {
-				FillInfo& vf = vFills[j];
-				// 始点調査
-				if (fi.p2 == vf.p1) {
-					// 次の行に縦線がある場合
-					if (vf.p2 == fi.p1+1) {
-						uint8_t bitLen = calcNumBits(vf.len);
-						uint8_t newBitLen = calcNumBits(vf.len+1);
-						if (bitLen == newBitLen || newBitLen <= vMaxLenBitLen) {
-							++fi.p2;
-							--fi.len;
-							--vf.p2;
-							++vf.len;
-							hMaxLen = fi.len;
-							hMaxLenBitLen = calcNumBits(hMaxLen);
-							bReduced = true;
-						}
-					}else if (vf.len != 1 && vf.p2+vf.len-1 == fi.p1) {
-						// 縦線の終点を延長すれば横線の始点を右にずらせる
-						++fi.p2;
-						--fi.len;
-						hMaxLen = fi.len;
-						hMaxLenBitLen = calcNumBits(hMaxLen);
-						bReduced = true;
-					}
-				}else if (fi.p2+fi.len-1 == vf.p1) {
-					// 縦線の始点を上に延長すれば、横線の終点を左にずらせる
-					if (vf.p2 != 0 && vf.p2-1 == fi.p1) {
-						uint8_t newBitLen = calcNumBits(vf.len+1);
-						if (newBitLen == vMaxLenBitLen) {
-							--fi.len;
-							hMaxLen = fi.len;
-							hMaxLenBitLen = calcNumBits(hMaxLen);
-							bReduced = true;
-							--vf.p2;
-							++vf.len;
-							vMaxLen = std::max(vMaxLen, vf.len);
-						}
-					}
-				}
-				if (fi.len == 1) {
-					break;
-				}
-			}
-			if (!bReduced) {
+	hFills.clear();
+	vFills.clear();
+	
+	const uint8_t w = values.GetWidth();
+	const uint8_t h = values.GetHeight();
+	
+	// 横方向の線の完全塗りつぶしを最初に調査
+	for (uint8_t y=0; y<h; ++y) {
+		uint8_t x;
+		for (x=0; x<w; ++x) {
+			if (!values[y][x]) {
 				break;
 			}
 		}
-	}
-	if (vMaxLen == 1) {
-		return;
-	}
-	// 長い縦線の長さを出来るだけ短くする最適化（多分横線の長さの最適化処理と共通化出来るけれど…）
-	for (size_t i=0; i<vFills.size(); ++i) {
-		FillInfo& fi = vFills[i];
-		if (fi.len != vMaxLen) {
+		if (x != w) {
 			continue;
 		}
-		// 始点が横線とぶつかっていたら始点をずらす。
-		if (isOverlappingWithFill(hFills, fi.p2, fi.p1)) {
-			++fi.p2;
-			--fi.len;
+		FillInfo fi;
+		fi.p1 = y;
+		fi.p2 = 0;
+		fi.len = w;
+		hFills.push_back(fi);
+
+		for (x=0; x<w; ++x) {
+			values[y][x] = PIXEL_X;
 		}
-		// 終点が横線とぶつかっていたら終点をずらす
-		if (isOverlappingWithFill(hFills, fi.p2+fi.len-1, fi.p1)) {
-			--fi.len;
+	}
+	// 横方向の塗りつぶし情報収集
+	for (uint8_t y=0; y<h; ++y) {
+		// 完全に塗りつぶしされてる行は飛ばす
+		if (isLineFullfilled(hFills, y, w)) {
+			continue;
 		}
-		for (size_t j=0; j<hFills.size(); ++j) {
-			FillInfo& hf = hFills[j];
-			if (fi.p2 == hf.p1) {
-				if (hf.p2+hf.len == fi.p1) { // 始点の左隣に横線が存在したら、その横線を右側に延長出来ないかチェック
-					;
-				}else if (hf.p2-1 == fi.p1) { // 始点の右隣に横線が存在したら、その横線を左側に延長出来ないかチェック
-					uint8_t newLenBits = calcNumBits(hf.len+1);
-					if (newLenBits <= hMaxLenBitLen) {
-						--hf.p2;
-						++hf.len;
-						hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
-						++fi.p2;
-						--fi.len;
+		
+		uint8_t* line = values[y];
+		for (uint8_t x=0; x<w; ++x) {
+			if (!line[x]) {
+				continue;
+			}
+			// ドットがあった場合
+			uint8_t ex;
+			// 横方向の連続調査
+			for (ex=x+1; ex<w; ++ex) {
+				if (!line[ex]) {
+					break;
+				}
+			}
+			if (ex-x > 1) {
+				// 横の連続塗りつぶし
+
+				// 始点が長い縦線に含まれている場合は長さを減少
+				if (findYRepeatLength(values, x, y) > ex-x) {
+					++x;
+				}
+				// 終点が長い縦線に含まれている場合は長さを減少
+				if (findYRepeatLength(values, ex-1, y) > ex-x) {
+					// ただし終端の１つ手前まで来ている場合は改行情報を節約できるので減少しない。
+					if (ex != w-1) {
+						--ex;
+					}
+				}
+				if (ex-x > 1) {
+					FillInfo fi;
+					fi.p1 = y;
+					fi.p2 = x;
+					fi.len = ex - x;
+					hFills.push_back(fi);
+					for (uint8_t i=x; i<ex; ++i) {
+						line[i] = PIXEL_X;
+					}
+					x = ex;
+					continue;
+				}
+			}
+
+			//// 横方向に1pixel ////
+
+			// 上下に縦方向の連続塗りつぶしがある場合
+			if (
+				(y != 0 && values[y-1][x])
+				|| (y != h-1 && values[y+1][x])
+			) {
+				// もし最後の列で１つ前の位置に横の記録があるなら、改行の1bitも、データがあるの1bitも容量は同じなのでデータを置く。
+				if (x == w-1 && values[y][x-2] == PIXEL_X) {
+
+				}else {
+					continue;
+				}
+			}
+			
+			// 横方向の最後に置いてある単独の塗りつぶしは改行情報も長さ情報も省けるので、横方向で採用する。
+			if (x != w-1) {
+				// 縦方向の最後や最後の１つ手前にある単独の塗りつぶしは、縦方向で採用すればそちらの改行情報を省けるので、横方向では採用しない。
+				if (y >= h-2) {
+					continue;
+				}
+				// 幅１の塗りつぶしで、左端からの距離より上端からの距離の方が大きい場合は、横方向では採用しない。
+				if (w-x > h-y) {
+					continue;
+				}
+			}
+
+			FillInfo fi;
+			fi.p1 = y;
+			fi.p2 = x;
+			fi.len = 1;
+			hFills.push_back(fi);
+			line[x] = PIXEL_X;
+		}
+	}
+
+#if 1
+	// 横方向の塗りつぶしの最適化
+	uint8_t maxLen = 0;
+	for (size_t i=0; i<hFills.size(); ++i) {
+		maxLen = std::max(maxLen, hFills[i].len);
+	}
+	uint8_t lp1 = -1;
+	for (size_t i=0; i<hFills.size(); ++i) {
+		FillInfo& fi = hFills[i];
+		// とりあえず行中の最初の塗りつぶしだけ対象にする。
+		if (fi.p1 == lp1) {
+			continue;
+		}
+		lp1 = fi.p1;
+		
+		if (fi.p2 > 0) {
+			// 始点の左側に縦方向の塗りつぶしがある場合、左方向に延長しても容量が増えないかどうか判定
+			if (values[fi.p1][fi.p2-1]) {
+				assert(values[fi.p1][fi.p2-1] == 1);
+				uint8_t oldBitLen = calcEncodedLen(fi.p2, w) + calcEncodedLen(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+				uint8_t newP2 = fi.p2 - 1;
+				uint8_t newLen = fi.len + 1;
+				if (newLen <= maxLen) {
+					uint8_t newBitLen = calcEncodedLen(newP2, w) + calcEncodedLen(newLen-1, std::min(maxLen, (uint8_t)(w-newP2)));
+					if (newBitLen <= oldBitLen) {
+						values[fi.p1][fi.p2-1] = PIXEL_X;
+						--fi.p2;
+						++fi.len;
 					}
 				}
 			}
-			uint8_t ep = fi.p2 + fi.len-1;
-			if (ep == hf.p1) {
-				if (fi.p1+1 == hf.p2) { // 終点の右隣に横線が存在したら、その横線を左側に延長出来ないかチェック
-					uint8_t newLenBits = calcNumBits(hf.len+1);
-					if (newLenBits <= hMaxLenBitLen) {
-						--hf.p2;
-						++hf.len;
-						hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
-						--fi.len;
-					}
-				}else if (fi.p1 == hf.p2+hf.len) { // 終点の左隣に横線が存在したら、その横線を右側に延長出来ないかチェック
-					uint8_t newLenBits = calcNumBits(hf.len+1);
-					if (newLenBits <= hMaxLenBitLen) {
-						++hf.len;
-						hMaxLen = std::max(hMaxLen, hf.len); // not sure if this was the longest hLine though.
-						--fi.len;
+		}
+		if (fi.p2+fi.len < w) {
+			// 終点の右側に縦方向の塗りつぶしがある場合、右方向に延長しても容量が増えないかどうか判定
+			if (values[fi.p1][fi.p2+fi.len]) {
+				assert(values[fi.p1][fi.p2+fi.len] == 1);
+				uint8_t oldBitLen = calcEncodedLen(fi.p2, w) + calcEncodedLen(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+				uint8_t newLen = fi.len + 1;
+				if (newLen <= maxLen) {
+					uint8_t newBitLen = calcEncodedLen(fi.p2, w) + calcEncodedLen(newLen-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+					if (newBitLen <= oldBitLen) {
+						assert(newBitLen == oldBitLen);
+						values[fi.p1][fi.p2+fi.len] = PIXEL_X;
+						++fi.len;
 					}
 				}
 			}
 		}
 	}
-
-
+#endif
+	
+	// 縦方向の塗りつぶし
+	for (uint8_t x=0; x<w; ++x) {
+		uint8_t cnt = 0;
+		bool yBuff[32] = {false};
+		// X記録を取り除いた縦線情報を収集
+		for (uint8_t y=0; y<h; ++y) {
+			uint8_t v = values[y][x];
+			if (v != PIXEL_X) {
+				if (v) {
+					yBuff[cnt] = true;
+					values[y][x] = PIXEL_Y;
+				}
+				++cnt;
+			}
+		}
+		vlens[x] = cnt;
+		// 縦線連続の情報を記録
+		for (uint8_t y=0; y<cnt; ++y) {
+			if (yBuff[y]) {
+				uint8_t ey;
+				for (ey=y+1; ey<cnt; ++ey) {
+					if (!yBuff[ey]) {
+						break;
+					}
+				}
+				FillInfo fi;
+				fi.p1 = x;
+				fi.p2 = y;
+				fi.len = ey - y;
+				vFills.push_back(fi);
+				y = ey;
+			}
+		}
+	}
+	
 }
 
-std::string Encode(const BitmapFont& bf, BitWriter& bw)
+std::string EncodeHeader(
+	BitWriter& bw,
+	uint8_t minX, uint8_t minY, uint8_t maxW, uint8_t maxH
+	)
+{
+	encodeNum(bw, minX, 16);
+	encodeNum(bw, minY, 16);
+	encodeNum(bw, maxW-1, 16);
+	encodeNum(bw, maxH-1, 16);
+
+	char buff[64];
+	sprintf(buff, "%d %d %d %d\r\n", minX, minY, maxW, maxH);
+	return buff;
+}
+
+std::string Encode(
+	BitWriter& bw,
+	const BitmapFont& bf,
+	uint8_t minX, uint8_t minY, uint8_t maxW, uint8_t maxH
+	
+	)
 {
 	std::vector<FillInfo> hFills;
 	std::vector<FillInfo> vFills;
 	
-	searchFills(bf, hFills, vFills);
-	optimizeFills(hFills, vFills);
+	Array2D<uint8_t> values = bf.values_;
+	uint8_t hlens[16];
+	for (uint8_t i=0; i<bf.h_; ++i) { hlens[i] = bf.w_; }
+	uint8_t vlens[16];
+	searchFills(values, hFills, vFills, vlens);
+	std::sort(hFills.begin(), hFills.end());
 	std::sort(vFills.begin(), vFills.end());
 	
 	std::vector<std::string> cmds;
 	char buff[32];
 	sprintf(buff, "(%d %d %d %d)", bf.x_, bf.y_, bf.w_, bf.h_);
 	cmds.push_back(buff);
-
-	encodeNum(bw, bf.x_, 16);
-	encodeNum(bw, bf.y_, 16);
+	
+	uint8_t recX = bf.x_ - minX;
+	uint8_t recY = bf.y_ - minY;
+	unaryEncode(bw, recX);
+	unaryEncode(bw, recY);
 	assert(bf.w_ != 0 && bf.h_ != 0);
-	encodeNum(bw, 16-(bf.x_+bf.w_), 16-bf.x_);
-	encodeNum(bw, 16-(bf.y_+bf.h_), 16-bf.y_);
-
-	buildCommands(bw, cmds, hFills, bf.h_, bf.w_);
-	buildCommands(bw, cmds, vFills, bf.w_, bf.h_);
+	unaryEncode(bw, maxW - (recX + bf.w_));
+	unaryEncode(bw, maxH - (recY + bf.h_));
+	
+	// dist
+	{
+		extern uint16_t g_dist[17][16];
+		++g_dist[0][bf.x_];
+		++g_dist[1][bf.y_];
+		++g_dist[2][bf.w_];
+		++g_dist[3][bf.w_];
+	}
+	
+	buildCommands(bw, cmds, hFills, bf.h_, hlens);
+	buildCommands(bw, cmds, vFills, bf.w_, vlens);
 	
 	std::string ret;
 	for (size_t i=0; i<cmds.size(); ++i) {

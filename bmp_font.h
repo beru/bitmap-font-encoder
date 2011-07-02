@@ -9,14 +9,13 @@ class BitmapFont
 public:
 	void Init(uint8_t w, uint8_t h);
 	void Next();
-	void Fill(uint8_t start, uint8_t len);
 	
 	std::string Dump() const;
 	
 	void FillPixel(uint8_t x, uint8_t y);
 	void Compact();
 	
-	Array2D<bool> values_;
+	Array2D<uint8_t> values_;
 	uint8_t x_;
 	uint8_t y_;
 	uint8_t w_;

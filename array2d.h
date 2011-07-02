@@ -12,6 +12,13 @@ public:
 	{
 	}
 	
+	Array2D(const Array2D& arr)
+		:
+		values_(0)
+	{
+		*this = arr;
+	}
+
 	Array2D& operator = (const Array2D& a)
 	{
 		Resize(a.w_, a.h_);
@@ -43,6 +50,9 @@ public:
 		return &values_[row * w_];
 	}
 	
+	size_t GetWidth() const { return w_; }
+	size_t GetHeight() const { return h_; }
+
 private:
 	size_t w_;
 	size_t h_;

@@ -11,14 +11,50 @@
 // encoding code to segment index
 uint16_t encoding_idx_table[0xffff];
 
-void printByteBits(FILE* f, uint8_t b)
+void loadBDFdata(
+	BitmapFont& bmpFont,
+	uint16_t idx,
+	const std::vector<BDF::CharacterSegment>& segments,
+	size_t segDataSize,
+	size_t hBytes,
+	std::vector<uint8_t>& data
+	)
 {
-	for (size_t i=0; i<8; ++i) {
-		bool bit = (b >> (8-1-i)) & 1;
-		fputc((bit ? '#':' '), f);
+	const BDF::CharacterSegment& seg = segments[idx];
+	uint32_t offset = idx * segDataSize;
+	uint8_t w = seg.BBX[0];
+	uint8_t h = seg.BBX[1];
+	bmpFont.Init(seg.BBX[0], seg.BBX[1]);
+	for (size_t y=0; y<segDataSize/hBytes; ++y) {
+		for (size_t hi=0; hi<hBytes; ++hi) {
+			uint8_t b = data[offset + hBytes*y + hi];
+			for (size_t x=0; x<8; ++x) {
+				if ((b >> (7-x)) & 1) {
+					bmpFont.FillPixel(8*hi+x, y);
+				}
+			}
+		}
 	}
 
 }
+
+void loadUnicodeBDFdata(
+	BitmapFont& bmpFont,
+	wchar_t c,
+	const std::vector<BDF::CharacterSegment>& segments,
+	size_t segDataSize,
+	size_t hBytes,
+	std::vector<uint8_t>& data
+	)
+{
+	uint16_t unicode = c;
+	uint16_t jis = CodeConvert::unicode_to_jis(unicode);
+	assert(jis);
+	uint16_t idx = encoding_idx_table[jis];
+	loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, data);
+}
+
+uint16_t g_dist[16][16];
 
 int main(int argc, char* argv[])
 {
@@ -66,57 +102,55 @@ int main(int argc, char* argv[])
 	ret.resize(200);
 	{
 		const size_t hBytes = (header.FONTBOUNDINGBOX[0] + 7) / 8;
-#if 1
 		BitWriter bitWriter;
 		BitReader bitReader;
-		uint8_t dest[8192] = {0};
+		uint8_t dest[8192*10] = {0};
 		bitWriter.Set(&dest[0]);
 		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-//		const wchar_t* str = L"“ü";
+//		const wchar_t* str = L"Šm"; // İŠÔ
 //		const wchar_t* str = L"M”ñlo—ÍŠÔ~ˆÓà–¾‘“I·Œ»—pØ‰Ÿ‰Á’l“_“dˆ³‹C”\İ“™";
 //		const wchar_t* str = L"Œá”yi‚í‚ª‚Í‚¢j‚Í”L‚Å‚ ‚éB–¼‘O‚Í‚Ü‚¾–³‚¢B";
 #if 1
 		const wchar_t* str = 
-			L"‘OŒã’ÊM”ñ“üo—ÍŠm”FŠÔ‰Šú–h–³Œø‹Ö~—e’ˆÓæˆµà–¾‘‹É«”Ô“I·Œ»g—pŠQØ‘Ö‘¹Å‘å“®‰Ÿ‘‰Á€”’l“_–Å“dŒ¹ˆ³—¬‹CÚ‘±”\•\¦İ’èŒë‘€ì“™‰×‰‰Z‰ğœ‘d—Ê²‰æšŒ¦•—‘Üü’›‰­–œç•S\‹ã”ªµ˜ZŒÜlO“ñˆêzŒv‘ª‹@Ší’[—íhŒû"
+			L"‘OŒã’ÊM”ñ“üo—ÍŠm”FŠÔ‰Šú–h–³Œø‹Ö~—e’ˆÓæˆµà–¾‘‹É«”Ô“I·Œ»g—pŠQØ‘Ö‘¹Å‘å“®‰Ÿ‘‰Á€”’l“_–Å“dŒ¹ˆ³—¬‹CÚ‘±”\•\¦İ’èŒë‘€ì“™‰×‰‰Z‰ğœ‘d—Ê²‰æšŒ¦•—‘ÜüŒv‘ª‹@Ší’[—íhŒû"
 			L"‚Ÿ‚ ‚¡‚¢‚£‚¤‚¥‚¦‚§‚¨‚©‚ª‚«‚¬‚­‚®‚¯‚°‚±‚²‚³‚´‚µ‚¶‚·‚¸‚¹‚º‚»‚¼‚½‚¾‚¿‚À‚Á‚Â‚Ã‚Ä‚Å‚Æ‚Ç‚È‚É‚Ê‚Ë‚Ì‚Í‚Î‚Ï‚Ğ‚Ñ‚Ò‚Ó‚Ô‚Õ‚Ö‚×‚Ø‚Ù‚Ú‚Û‚Ü‚İ‚Ş‚ß‚à‚á‚â‚ã‚ä‚å‚æ‚ç‚è‚é‚ê‚ë‚ì‚í‚î‚ï‚ğ‚ñ"
 			L"ƒ@ƒAƒBƒCƒDƒEƒFƒGƒHƒIƒJƒKƒLƒMƒNƒOƒPƒQƒRƒSƒTƒUƒVƒWƒXƒYƒZƒ[ƒ\ƒ]ƒ^ƒ_ƒ`ƒaƒbƒcƒdƒeƒfƒgƒhƒiƒjƒkƒlƒmƒnƒoƒpƒqƒrƒsƒtƒuƒvƒwƒxƒyƒzƒ{ƒ|ƒ}ƒ~ƒ€ƒƒ‚ƒƒƒ„ƒ…ƒ†ƒ‡ƒˆƒ‰ƒŠƒ‹ƒŒƒƒƒƒƒ‘ƒ’ƒ“ƒ”ƒ•ƒ–"
-			L"BDAC"
+			L"BDAC’›‰­–œç•S\‹ã”ªµ˜ZŒÜlO“ñˆê‚O‚P‚Q‚R‚S‚T‚U‚V‚W‚X•ijopyzƒ„‚`‚a‚b‚c‚d‚e‚f‚g‚h‚i‚j‚k‚l‚m‚n‚o‚p‚q‚r‚s‚t‚u‚v‚w‚x‚y‚‚‚‚ƒ‚„‚…‚†‚‡‚ˆ‚‰‚Š‚‹‚Œ‚‚‚‚‚‘‚’‚“‚”‚•‚–‚—‚˜‚™‚š"
+			L"Š@ŠAŠBŠCŠDŠEŠFŠGŠHŠIŠJŠKŠLŠMŠNŠOŠPŠQŠRŠSŠTŠUŠVŠWŠXŠYŠZŠ[Š\Š]Š^Š_Š`ŠaŠbŠcŠdŠeŠfŠgŠhŠiŠjŠkŠlŠmŠnŠoŠpŠqŠrŠsŠtŠuŠvŠwŠxŠyŠzŠ{Š|Š}Š~Š€ŠŠ‚ŠƒŠ„Š…Š†Š‡ŠˆŠ‰ŠŠŠ‹ŠŒŠŠŠŠŠ‘Š’Š“Š”Š•Š–Š—Š˜Š™ŠšŠ›ŠœŠŠ"
 		;
 #endif
+		const size_t strLen = wcslen(str);
+		fprintf(of, "string length : %d\r\n", strLen);
 		BitmapFont bmpFont;
-		for (size_t i=0; i<wcslen(str); ++i) {
+		uint8_t minX = -1;
+		uint8_t minY = -1;
+		uint8_t maxW = 0;
+		uint8_t maxH = 0;
+		for (size_t i=0; i<strLen; ++i) {
 			wchar_t c = str[i];
-			uint16_t unicode = c;
-			uint16_t jis = CodeConvert::unicode_to_jis(unicode);
-			assert(jis);
-			uint16_t idx = encoding_idx_table[jis];
-			const BDF::CharacterSegment& seg = segments[idx];
-			uint32_t offset = idx * segDataSize;
-			uint8_t w = seg.BBX[0];
-			uint8_t h = seg.BBX[1];
-			bmpFont.Init(seg.BBX[0], seg.BBX[1]);
-			for (size_t y=0; y<segDataSize/hBytes; ++y) {
-				for (size_t hi=0; hi<hBytes; ++hi) {
-					uint8_t b = data[offset + hBytes*y + hi];
-					for (size_t x=0; x<8; ++x) {
-						if ((b >> (7-x)) & 1) {
-							bmpFont.FillPixel(8*hi+x, y);
-						}
-					}
-				}
-			}
+			loadUnicodeBDFdata(bmpFont, c, segments, segDataSize, hBytes, data);
+			bmpFont.Compact();
+			minX = std::min(minX, bmpFont.x_);
+			minY = std::min(minY, bmpFont.y_);
+			maxW = std::max(maxW, bmpFont.w_);
+			maxH = std::max(maxH, bmpFont.h_);
+		}
+		fputs(EncodeHeader(bitWriter, minX, minY, maxW, maxH).c_str(), of);
+		for (size_t i=0; i<strLen; ++i) {
+			wchar_t c = str[i];
+			loadUnicodeBDFdata(bmpFont, c, segments, segDataSize, hBytes, data);
 			bmpFont.Compact();
 			fputs(bmpFont.Dump().c_str(), of);
 			size_t oldNBits = bitWriter.GetNBits();
 			fputs(
-				Encode(bmpFont, bitWriter).c_str()
+				Encode(bitWriter, bmpFont, minX, minY, maxW, maxH).c_str()
 			, of)
 			;
 			fprintf(of, "num of bits : %d\r\n", bitWriter.GetNBits()-oldNBits);
 		}
 
-#if 1
+#if 0
 		bmpFont.Init(1,1);
 		for (size_t i=0; i<wcslen(str); ++i) {
 			Decode(bmpFont, bitReader);
@@ -127,28 +161,6 @@ int main(int argc, char* argv[])
 #endif
 		fprintf(of, "total num of bits : %d\r\n", bitWriter.GetNBits());
 		fclose(of);
-#else
-		FILE* f = fopen("imacat.txt", "rb");		// http://www.aozora.gr.jp/cards/000148/files/789_14547.html ( save in utf-16le )
-		FILE* of = fopen("imacat_aa.txt", "wb");	// it'll be huge
-		wint_t c;
-		while ((c = fgetwc(f)) != 0xffff) {
-			uint16_t unicode = c;
-			uint16_t jis = CodeConvert::unicode_to_jis(unicode);
-			uint16_t idx = encoding_idx_table[jis];
-			const BDF::CharacterSegment& seg = segments[idx];
-			uint32_t offset = idx * segDataSize;
-			for (size_t j=0; j<segDataSize; j+=hBytes) {
-	//			printf("%02X", data[offset+j]);
-				printByteBits(of, data[offset+j]);
-				printByteBits(of, data[offset+j+1]);
-				fprintf(of, "\r\n");
-			}
-			fprintf(of, "\r\n");
-	//		printf("%d %d\r\n", seg.BBX[0], seg.BBX[1]);
-		}
-		fclose(f);
-		fclose(of);
-#endif
 		int hoge = 0;
 	}
 	return 0;
