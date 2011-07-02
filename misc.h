@@ -46,6 +46,7 @@ void readHexBytes(const char* str, uint8_t* data, size_t nBytes)
 	}
 }
 
+// Round up to next higher power of 2 (return x if it's already a power of 2).
 inline
 uint8_t pow2roundup(uint8_t x)
 {
@@ -53,6 +54,31 @@ uint8_t pow2roundup(uint8_t x)
     x |= x >> 1;
     x |= x >> 2;
     x |= x >> 4;
+    return x+1;
+}
+
+// Round up to next higher power of 2 (return x if it's already a power of 2).
+inline
+uint16_t pow2roundup16(uint16_t x)
+{
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    return x+1;
+}
+
+// Round up to next higher power of 2 (return x if it's already a power of 2).
+inline
+uint32_t pow2roundup32(uint32_t x)
+{
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
     return x+1;
 }
 
@@ -74,7 +100,7 @@ uint8_t countBits16(uint16_t n)
 	n = (unsigned short)( ((n & 0xCCCC) >> 2) + (n & 0x3333) );
 	n = (unsigned short)( ((n & 0xF0F0) >> 4) + (n & 0x0F0F) );
 	n = (unsigned short)( ((n & 0xFF00) >> 8) + (n & 0x00FF) );
-	return n;
+	return (uint8_t) n;
 }
 
 inline

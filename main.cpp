@@ -104,50 +104,42 @@ int main(int argc, char* argv[])
 		const size_t hBytes = (header.FONTBOUNDINGBOX[0] + 7) / 8;
 		BitWriter bitWriter;
 		BitReader bitReader;
-		uint8_t dest[8192*10] = {0};
+		std::vector<uint8_t> dest(1024*1024);
 		bitWriter.Set(&dest[0]);
 		bitReader.Set(&dest[0]);
 		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
-//		const wchar_t* str = L"確"; // 設間
-//		const wchar_t* str = L"信非人出力間止意説明書的差現用切押加値点電圧気能設等";
-//		const wchar_t* str = L"吾輩（わがはい）は猫である。名前はまだ無い。";
-#if 1
-		const wchar_t* str = 
-			L"前後通信非入出力確認間初期防無効禁止容注意取扱説明書極性番的差現使用害切替損傷最大動押増加項数値点滅電源圧流気接続能表示設定誤操作等荷演算解除総重量軸画字絹風袋線計測機器端麗辛口"
-			L"ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをん"
-			L"ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲンヴヵヶ"
-			L"。．、，兆億万千百十九八七六五四三二一０１２３４５６７８９＝＆（）｛｝【】＜＞ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
-			L"魁晦械海灰界皆絵芥蟹開階貝凱劾外咳害崖慨概涯碍蓋街該鎧骸浬馨蛙垣柿蛎鈎劃嚇各廓拡撹格核殻獲確穫覚角赫較郭閣隔革学岳楽額顎掛笠樫橿梶鰍潟割喝恰括活渇滑葛褐轄且鰹叶椛樺鞄株兜竃蒲釜鎌噛鴨栢茅萱"
-		;
-#endif
-		const size_t strLen = wcslen(str);
+
+		const size_t strLen = header.CHARS;
 		fprintf(of, "string length : %d\r\n", strLen);
+		
 		BitmapFont bmpFont;
 		uint8_t minX = -1;
 		uint8_t minY = -1;
 		uint8_t maxW = 0;
 		uint8_t maxH = 0;
+		std::vector<uint16_t> strs(strLen);
 		for (size_t i=0; i<strLen; ++i) {
-			wchar_t c = str[i];
-			loadUnicodeBDFdata(bmpFont, c, segments, segDataSize, hBytes, data);
+			strs[i] = segments[i].ENCODING;
+			loadBDFdata(bmpFont, i, segments, segDataSize, hBytes, data);
 			bmpFont.Compact();
+			assert(bmpFont.w_ <= 16);
+			assert(bmpFont.h_ <= 16);
 			minX = std::min(minX, bmpFont.x_);
 			minY = std::min(minY, bmpFont.y_);
 			maxW = std::max(maxW, bmpFont.w_);
 			maxH = std::max(maxH, bmpFont.h_);
 		}
-		fputs(EncodeHeader(bitWriter, minX, minY, maxW, maxH).c_str(), of);
+		fputs(EncodeHeader(bitWriter, strLen, &strs[0], minX, minY, maxW, maxH).c_str(), of);
 		for (size_t i=0; i<strLen; ++i) {
-			wchar_t c = str[i];
-			loadUnicodeBDFdata(bmpFont, c, segments, segDataSize, hBytes, data);
+			loadBDFdata(bmpFont, i, segments, segDataSize, hBytes, data);
 			bmpFont.Compact();
-			fputs(bmpFont.Dump().c_str(), of);
+//			fputs(bmpFont.Dump().c_str(), of);
 			size_t oldNBits = bitWriter.GetNBits();
-			fputs(
+//			fputs(
 				Encode(bitWriter, bmpFont, minX, minY, maxW, maxH).c_str()
-			, of)
+//			, of)
 			;
-			fprintf(of, "num of bits : %d\r\n", bitWriter.GetNBits()-oldNBits);
+//			fprintf(of, "num of bits : %d\r\n", bitWriter.GetNBits()-oldNBits);
 		}
 
 #if 0
@@ -159,7 +151,10 @@ int main(int argc, char* argv[])
 			fputs("\r\n", of);
 		}
 #endif
-		fprintf(of, "total num of bits : %d\r\n", bitWriter.GetNBits());
+		size_t totalBits = bitWriter.GetNBits();
+		fprintf(of, "total num of bits : %d\r\n", totalBits);
+		fprintf(of, "total num of bytes : %d\r\n", totalBits/8);
+		fprintf(of, "total num of killo bytes : %f\r\n", totalBits/8.0/1024);
 		fclose(of);
 		int hoge = 0;
 	}

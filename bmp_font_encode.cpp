@@ -16,12 +16,57 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 	return lhs.p1 < rhs.p1;
 }
 
-void unaryEncode(BitWriter& bw, uint8_t n)
+void integerEncode_Alpha(BitWriter& bw, uint16_t n)
 {
-	for (uint8_t i=0; i<n; ++i) {
+	for (uint16_t i=0; i<n; ++i) {
 		bw.Push(1);
 	}
 	bw.Push(0);
+}
+
+
+// http://www.hackersdelight.org/HDcode/flp2.c.txt
+/* Round down to a power of 2. */
+unsigned flp2_16(uint16_t x) {
+   x = x | (x >> 1);
+   x = x | (x >> 2);
+   x = x | (x >> 4);
+   x = x | (x >> 8);
+   return x - (x >> 1);
+}
+
+uint8_t log2(uint32_t v) {
+	int r;      // result goes here
+
+	static const int MultiplyDeBruijnBitPosition[32] = 
+	{
+	  0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30,
+	  8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31
+	};
+
+	v |= v >> 1; // first round down to one less than a power of 2 
+	v |= v >> 2;
+	v |= v >> 4;
+	v |= v >> 8;
+	v |= v >> 16;
+
+	r = MultiplyDeBruijnBitPosition[(uint32_t)(v * 0x07C4ACDDU) >> 27];
+	return r;
+}
+
+
+void integerEncode_Gamma(BitWriter& bw, uint16_t v)
+{
+	if (v == 0) {
+		bw.Push(0);
+		return;
+	}
+	uint8_t n = log2(v+1);
+	uint16_t remain = v - (1<<n);
+	integerEncode_Alpha(bw, n);
+	for (uint8_t i=0; i<n; ++i) {
+		bw.Push(remain & (1<<i));
+	}
 }
 
 void encodeNum(BitWriter& bw, uint8_t n, uint8_t m)
@@ -428,11 +473,35 @@ void searchFills(
 	
 }
 
+void push16(BitWriter& bw, uint16_t u)
+{
+	for (uint8_t i=0; i<16; ++i) {
+		bw.Push(u & (1<<i));
+	}
+}
+
 std::string EncodeHeader(
 	BitWriter& bw,
+	uint16_t strCount, const uint16_t* codes,
 	uint8_t minX, uint8_t minY, uint8_t maxW, uint8_t maxH
 	)
 {
+	push16(bw, strCount);
+	assert(strCount != 0);
+	uint16_t code = codes[0];
+	push16(bw, code);
+	uint16_t prevCode = code;
+
+	uint16_t dist[4096] = {0};
+	for (uint16_t i=1; i<strCount; ++i) {
+		uint16_t code = codes[i];
+		int diff = code - prevCode;
+		assert(diff > 0);
+		++dist[diff];
+		integerEncode_Gamma(bw, diff - 1);
+		prevCode = code;
+	}
+	
 	encodeNum(bw, minX, 16);
 	encodeNum(bw, minY, 16);
 	encodeNum(bw, maxW-1, 16);
@@ -468,11 +537,11 @@ std::string Encode(
 	
 	uint8_t recX = bf.x_ - minX;
 	uint8_t recY = bf.y_ - minY;
-	unaryEncode(bw, recX);
-	unaryEncode(bw, recY);
-	assert(bf.w_ != 0 && bf.h_ != 0);
-	unaryEncode(bw, maxW - (recX + bf.w_));
-	unaryEncode(bw, maxH - (recY + bf.h_));
+	integerEncode_Alpha(bw, recX);
+	integerEncode_Alpha(bw, recY);
+//	assert(bf.w_ != 0 && bf.h_ != 0);
+	integerEncode_Alpha(bw, maxW - (recX + bf.w_));
+	integerEncode_Alpha(bw, maxH - (recY + bf.h_));
 	
 	// dist
 	{
