@@ -4,6 +4,8 @@
 #include "misc.h"
 #include "integer_coding.h"
 
+/*
+
 struct FillInfo
 {
 	uint8_t p1;
@@ -77,6 +79,61 @@ void decodeFills(
 	}while (row < len1);
 }
 
+
+*/
+
+namespace {
+
+void decodeHorizontalFills(
+	BitReader& br,
+	Array2D<uint8_t>& values
+	)
+{
+	uint16_t lineFlags = 0;
+	for (uint8_t i=0; i<len1; ++i) {
+		lineFlags |= br.Pop() << i;
+	}
+	if (!lineFlags) {
+		return;
+	}
+	uint8_t maxLen = integerDecode_CBT(br, values.w_) + 1;
+	uint8_t row = ntz(lineFlags);
+	uint8_t col = 0;
+	while (row < values.h_) {
+		if (col != 0) {
+			if (!br.Pop()) {
+				++row;
+				continue;
+			}
+		}
+		uint8_t remain = values.w_ - col;
+		if (remain <= 2) {
+			if (remain == 1) {
+
+			}else {
+				
+			}
+		}else {
+			uint8_t offset = integerDecode_CBT(br, remain);
+			col += offset;
+			uint8_t len = integerDecode_CBT(br, std::min(maxLen, values.w_-col);
+			col += len + 1;
+		}
+		
+	}
+}
+
+void decodeFills(
+	BitReader& br,
+	Array2D<uint8_t>& values
+	)
+{
+	decodeHorizontalFills(br, values);
+	
+}
+
+} // namespace anonymous
+
 void Decode(BitReader& br, BitmapFont& bf, const BmpFontHeader& fontInfo)
 {
 	uint8_t recX = integerDecode_Alpha(br);
@@ -96,23 +153,7 @@ void Decode(BitReader& br, BitmapFont& bf, const BmpFontHeader& fontInfo)
 	
 	bf.Init(bf.w_, bf.h_);
 	
-	std::vector<FillInfo> hFills;
-	std::vector<FillInfo> vFills;
-	decodeFills(br, hFills, bf.h_, bf.w_);
-	decodeFills(br, vFills, bf.w_, bf.h_);
-	
-	for (size_t i=0; i<hFills.size(); ++i) {
-		const FillInfo& fi = hFills[i];
-		for (uint8_t j=0; j<fi.len; ++j) {
-			bf.FillPixel(fi.p2+j, fi.p1);
-		}
-	}
-	for (size_t i=0; i<vFills.size(); ++i) {
-		const FillInfo& fi = vFills[i];
-		for (uint8_t j=0; j<fi.len; ++j) {
-			bf.FillPixel(fi.p1, fi.p2+j);
-		}
-	}
+	decodeFills(br, bf.values_);
 }
 
 bool DecodeHeader(class BitReader& br, BmpFontHeader& header)
