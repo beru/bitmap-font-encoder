@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdio.h>
+#include "trace.h"
 
 inline
 size_t GetFileSize(FILE* file)

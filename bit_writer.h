@@ -16,6 +16,8 @@ public:
 	
 	void Push(bool b)
 	{
+// TRACE("%d", b);
+
 		int v = b ? 1 : 0;
 		int val = v << (7 - counter_);
 		if (counter_ == 0) {

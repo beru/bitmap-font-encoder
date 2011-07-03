@@ -16,15 +16,6 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 	return lhs.p1 < rhs.p1;
 }
 
-void integerEncode_Alpha(BitWriter& bw, uint16_t n)
-{
-	for (uint16_t i=0; i<n; ++i) {
-		bw.Push(1);
-	}
-	bw.Push(0);
-}
-
-
 // http://www.hackersdelight.org/HDcode/flp2.c.txt
 /* Round down to a power of 2. */
 unsigned flp2_16(uint16_t x) {
@@ -54,18 +45,50 @@ uint8_t log2(uint32_t v) {
 	return r;
 }
 
+void integerEncode_Alpha(BitWriter& bw, uint16_t n)
+{
+	for (uint16_t i=0; i<n; ++i) {
+		bw.Push(0);
+	}
+	bw.Push(1);
+}
 
 void integerEncode_Gamma(BitWriter& bw, uint16_t v)
 {
 	if (v == 0) {
-		bw.Push(0);
+		bw.Push(1);
 		return;
 	}
 	uint8_t n = log2(v+1);
-	uint16_t remain = v - (1<<n);
+	uint16_t remain = v - (1<<n) + 1;
 	integerEncode_Alpha(bw, n);
 	for (uint8_t i=0; i<n; ++i) {
-		bw.Push(remain & (1<<i));
+		bw.Push((remain >> (n-1-i)) & 1);
+	}
+}
+
+void integerEncode_Delta(BitWriter& bw, uint16_t v)
+{
+	if (v == 0) {
+		bw.Push(1);
+		return;
+	}
+	uint8_t n = log2(v+1);
+	uint16_t remain = v - (1<<n) + 1;
+	integerEncode_Gamma(bw, n);
+	for (uint8_t i=0; i<n; ++i) {
+		bw.Push((remain >> (n-1-i)) & 1);
+	}
+}
+
+void testIntergerCoding()
+{
+	uint8_t buff[128];
+	BitWriter bw;
+	bw.Set(buff);
+	for (uint16_t i=0; i<255; ++i) {
+		integerEncode_Gamma(bw, i);
+TRACE("\r\n");
 	}
 }
 
@@ -486,6 +509,8 @@ std::string EncodeHeader(
 	uint8_t minX, uint8_t minY, uint8_t maxW, uint8_t maxH
 	)
 {
+//	testIntergerCoding();
+	
 	push16(bw, strCount);
 	assert(strCount != 0);
 	uint16_t code = codes[0];
@@ -498,7 +523,7 @@ std::string EncodeHeader(
 		int diff = code - prevCode;
 		assert(diff > 0);
 		++dist[diff];
-		integerEncode_Gamma(bw, diff - 1);
+		integerEncode_Delta(bw, diff - 1);
 		prevCode = code;
 	}
 	
@@ -537,7 +562,8 @@ std::string Encode(
 	
 	uint8_t recX = bf.x_ - minX;
 	uint8_t recY = bf.y_ - minY;
-	integerEncode_Alpha(bw, recX);
+	// TODO: 0より1が圧倒的に多いので…。。ただ要適切に対処
+	integerEncode_Alpha(bw, (recX == 0 ? 15 : recX-1));
 	integerEncode_Alpha(bw, recY);
 //	assert(bf.w_ != 0 && bf.h_ != 0);
 	integerEncode_Alpha(bw, maxW - (recX + bf.w_));
