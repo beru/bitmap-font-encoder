@@ -195,6 +195,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\integer_coding.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\main.cpp"
 				>
 			</File>
@@ -242,6 +246,10 @@
 			</File>
 			<File
 				RelativePath=".\common.h"
+				>
+			</File>
+			<File
+				RelativePath=".\integer_coding.h"
 				>
 			</File>
 			<File

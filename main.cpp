@@ -4,9 +4,10 @@
 #include "bdf.h"
 #include "code_convert.h"
 #include "bmp_font.h"
-#include "bmp_font_encode.h"
 #include "bit_writer.h"
 #include "bit_reader.h"
+#include "bmp_font_encode.h"
+#include "bmp_font_decode.h"
 #include <algorithm>
 
 // encoding code to segment index
@@ -72,6 +73,7 @@ void encodeCharacters(
 	const size_t hBytes = (header.FONTBOUNDINGBOX[0] + 7) / 8;
 	
 	BitmapFont bmpFont;
+	BmpFontHeader bmpFontHeader;
 	uint8_t minX = -1;
 	uint8_t minY = -1;
 	uint8_t maxW = 0;
@@ -89,7 +91,13 @@ void encodeCharacters(
 		maxW = std::max(maxW, bmpFont.w_);
 		maxH = std::max(maxH, bmpFont.h_);
 	}
-	fputs(EncodeHeader(bitWriter, strLen, &strs[0], minX, minY, maxW, maxH).c_str(), of);
+	bmpFontHeader.minX = minX;
+	bmpFontHeader.minY = minY;
+	bmpFontHeader.maxW = maxW;
+	bmpFontHeader.maxH = maxH;
+	bmpFontHeader.characterCount = strLen;
+	bmpFontHeader.characterCodes = &strs[0];
+	fputs(EncodeHeader(bitWriter, bmpFontHeader).c_str(), of);
 	for (size_t i=0; i<strLen; ++i) {
 		uint16_t idx = idxs[i];
 		loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, bitmapData);
@@ -98,13 +106,29 @@ void encodeCharacters(
 		fputs("\r\n", of);
 		size_t oldNBits = bitWriter.GetNBits();
 //			fputs(
-			Encode(bitWriter, bmpFont, minX, minY, maxW, maxH).c_str()
+			Encode(bitWriter, bmpFont, bmpFontHeader).c_str()
 //			, of)
 		;
 //			fprintf(of, "num of bits : %8d\r\n", bitWriter.GetNBits()-oldNBits);
 	}
+}
 
+void decodeCharacters(const uint8_t* pData, size_t bytes, FILE* f)
+{
+	BitReader bitReader;
+	bitReader.Set(pData);
 
+	BmpFontHeader header = {0};
+	uint16_t codes[8192] = {0};
+	header.characterCodes = codes;
+	if (!DecodeHeader(bitReader, header)) {
+		return;
+	}
+	BitmapFont bf;
+	for (uint16_t i=0; i<header.characterCount; ++i) {
+		Decode(bitReader, bf, header);
+		fputs(bf.Dump().c_str(), f);
+	}
 }
 
 int main(int argc, char* argv[])
@@ -113,49 +137,47 @@ int main(int argc, char* argv[])
 		printf("usage : bitmap_font_encoder bdf_filename\r\n");
 		return 1;
 	}
-
-	// load bdf file ( tested with shnmk16.bdf )
-	std::vector<char> bytes;
+	
+	FILE* of = fopen("result.txt", "wb");	// it'll be huge
+	// encode
 	{
-		FILE* f = fopen(argv[1], "rb");
-		if (!f) {
-			printf("failed to open file\r\n");
+		// load bdf file ( tested with shnmk16.bdf )
+		std::vector<char> bytes;
+		{
+			FILE* f = fopen(argv[1], "rb");
+			if (!f) {
+				printf("failed to open file\r\n");
+				return 1;
+			}
+			size_t fileSize = GetFileSize(f);
+			bytes.resize(fileSize);
+			fread(&bytes[0], 1, fileSize, f);
+			fclose(f);
+		}
+		
+		BDF::Header header;
+		const char* segStart = BDF::ReadHeader(&bytes[0], bytes.size(), header);
+		if (segStart == 0) {
+			printf("character segments not found.\n");
 			return 1;
 		}
-		size_t fileSize = GetFileSize(f);
-		bytes.resize(fileSize);
-		fread(&bytes[0], 1, fileSize, f);
-		fclose(f);
-	}
-	
-	BDF::Header header;
-	const char* segStart = BDF::ReadHeader(&bytes[0], bytes.size(), header);
-	if (segStart == 0) {
-		printf("character segments not found.\n");
-		return 1;
-	}
 
-	std::vector<BDF::CharacterSegment> segments(header.CHARS);
-	size_t segDataSize = BDF::CalcSegmentMaxDataSize(header);
-	std::vector<uint8_t> bitmapData(header.CHARS * segDataSize);
-	BDF::ReadCharacterSegments(segStart, bytes.size() - (segStart - &bytes[0]), header, &segments[0], &bitmapData[0]);
-	
-	// initialize code convertion routine
-	if (!CodeConvert::Init()) {
-		return 1;
-	}
-	for (size_t i=0; i<header.CHARS; ++i) {
-		const BDF::CharacterSegment& seg = segments[i];
-		encoding_idx_table[ seg.ENCODING ] = i;
-	}
-	
-	{
+		std::vector<BDF::CharacterSegment> segments(header.CHARS);
+		size_t segDataSize = BDF::CalcSegmentMaxDataSize(header);
+		std::vector<uint8_t> bitmapData(header.CHARS * segDataSize);
+		BDF::ReadCharacterSegments(segStart, bytes.size() - (segStart - &bytes[0]), header, &segments[0], &bitmapData[0]);
+		
+		// initialize code convertion routine
+		if (!CodeConvert::Init()) {
+			return 1;
+		}
+		for (size_t i=0; i<header.CHARS; ++i) {
+			const BDF::CharacterSegment& seg = segments[i];
+			encoding_idx_table[ seg.ENCODING ] = i;
+		}
 		BitWriter bitWriter;
-		BitReader bitReader;
 		std::vector<uint8_t> dest(1024*1024);
 		bitWriter.Set(&dest[0]);
-		bitReader.Set(&dest[0]);
-		FILE* of = fopen("encoded.txt", "wb");	// it'll be huge
 
 		std::vector<uint16_t> idxs;
 #if 0
@@ -190,22 +212,29 @@ int main(int argc, char* argv[])
 #endif
 
 		encodeCharacters(header, segments, segDataSize, bitmapData, bitWriter, of, strLen, &idxs[0]);
-#if 0
-		bmpFont.Init(1,1);
-		for (size_t i=0; i<wcslen(str); ++i) {
-			Decode(bmpFont, bitReader);
-			std::string s = bmpFont.Dump();
-			fputs(s.c_str(), of);
-			fputs("\r\n", of);
-		}
-#endif
 		size_t totalBits = bitWriter.GetNBits();
 		fprintf(of, "total num of bits : %d\r\n", totalBits);
 		fprintf(of, "total num of bytes : %d\r\n", totalBits/8);
 		fprintf(of, "total num of killo bytes : %f\r\n", totalBits/8.0/1024);
-		fclose(of);
 		int hoge = 0;
+
+		of = fopen("output.bin", "wb");
+		fwrite(&dest[0], 1, bitWriter.GetNBytes(), of);
+		fclose(of);
 	}
+	
+	// decode test
+	{
+		FILE* f = fopen("output.bin", "rb");
+		size_t fileSize = GetFileSize(f);
+		std::vector<uint8_t> data(fileSize);
+		fread(&data[0], 1, fileSize, f);
+		fclose(f);
+		
+		decodeCharacters(&data[0], data.size(), of);
+	}
+	fclose(of);
+
 	return 0;
 }
 

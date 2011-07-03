@@ -2,6 +2,7 @@
 
 #include "bit_reader.h"
 #include "misc.h"
+#include "integer_coding.h"
 
 struct FillInfo
 {
@@ -9,27 +10,6 @@ struct FillInfo
 	uint8_t p2;
 	uint8_t len;
 };
-
-uint8_t decodeNum(BitReader& br, uint8_t maxNum)
-{
-	assert(maxNum >= 1 && maxNum <= 16);
-	if (maxNum == 1) {
-		return 0;
-	}
-	uint8_t p2 = pow2roundup(maxNum);
-	uint8_t nBits = countBits8(p2-1)-1;
-	uint8_t ret = 0;
-	for (uint8_t i=0; i<nBits; ++i) {
-		ret |= br.Pop() << (nBits-1-i);
-	}
-	if (ret >= p2-maxNum) {
-		ret <<= 1;
-		ret |= br.Pop();
-		ret -= p2-maxNum;
-	}
-	assert(ret >= 0 && ret <= maxNum);
-	return ret;
-}
 
 void decodeFills(
 	BitReader& br,
@@ -45,7 +25,7 @@ void decodeFills(
 	if (!lineFlags) {
 		return;
 	}
-	uint8_t maxLen = decodeNum(br, len2)+1;
+	uint8_t maxLen = integerDecode_CBT(br, len2)+1;
 	uint8_t row = ntz(lineFlags);
 	
 	uint8_t col = 0;
@@ -53,12 +33,12 @@ void decodeFills(
 		uint8_t offset;
 		uint8_t fillLen;
 		if (col == 0) {
-			offset = decodeNum(br, len2);
+			offset = integerDecode_CBT(br, len2);
 			if (len2-offset == 1) {
 				fillLen = 1;
 			}else {
 				assert(len2 >= offset);
-				fillLen = decodeNum(br, std::min(maxLen, (uint8_t)(len2-offset))) + 1;
+				fillLen = integerDecode_CBT(br, std::min(maxLen, (uint8_t)(len2-offset))) + 1;
 			}
 		}else {
 			bool b = br.Pop();
@@ -72,11 +52,11 @@ void decodeFills(
 				offset = 0;
 				fillLen = 1;
 			}else {
-				offset = decodeNum(br, diff);
+				offset = integerDecode_CBT(br, diff);
 				if (len2-(col+offset) == 1) {
 					fillLen = 1;
 				}else {
-					fillLen = decodeNum(br, std::min(maxLen, (uint8_t)(len2-(col+offset)))) + 1;
+					fillLen = integerDecode_CBT(br, std::min(maxLen, (uint8_t)(len2-(col+offset)))) + 1;
 				}
 			}
 		}
@@ -97,24 +77,29 @@ void decodeFills(
 	}while (row < len1);
 }
 
-void Decode(BitmapFont& bf, BitReader& br)
+void Decode(BitReader& br, BitmapFont& bf, const BmpFontHeader& fontInfo)
 {
-	uint8_t x = decodeNum(br, 16);
-	uint8_t y = decodeNum(br, 16);
+	uint8_t recX = integerDecode_Alpha(br);
+	uint8_t recY = integerDecode_Alpha(br);
 	
-	uint8_t x2 = decodeNum(br, 16-x);
-	uint8_t y2 = decodeNum(br, 16-y);
+	uint8_t recW = integerDecode_Alpha(br);
+	uint8_t recH = integerDecode_Alpha(br);
 	
-	uint8_t w = 16 - x2 - x;
-	uint8_t h = 16 - y2 - y;
-	bf.Init(w, h);
-	bf.x_ = x;
-	bf.y_ = y;
+	if (recX == 15) {
+		recX = 0;
+	}
+
+	bf.x_ = recX + fontInfo.minX;
+	bf.y_ = recY + fontInfo.minY;
+	bf.w_ = fontInfo.maxW - recX - recW;
+	bf.h_ = fontInfo.maxH - recY - recH;
+	
+	bf.Init(bf.w_, bf.h_);
 	
 	std::vector<FillInfo> hFills;
 	std::vector<FillInfo> vFills;
-	decodeFills(br, hFills, h, w);
-	decodeFills(br, vFills, w, h);
+	decodeFills(br, hFills, bf.h_, bf.w_);
+	decodeFills(br, vFills, bf.w_, bf.h_);
 	
 	for (size_t i=0; i<hFills.size(); ++i) {
 		const FillInfo& fi = hFills[i];
@@ -128,5 +113,25 @@ void Decode(BitmapFont& bf, BitReader& br)
 			bf.FillPixel(fi.p1, fi.p2+j);
 		}
 	}
+}
+
+bool DecodeHeader(class BitReader& br, BmpFontHeader& header)
+{
+	popBits(br, header.characterCount);
+	uint16_t code = 0;
+	popBits(br, code);
+	uint16_t* codes = header.characterCodes;
+	codes[0] = code;
+	uint16_t diff;
+	for (uint16_t i=1; i<header.characterCount; ++i) {
+		diff = integerDecode_Delta(br);
+		code += diff + 1;
+		codes[i] = code;
+	}
+	header.minX = integerDecode_CBT(br, 16);
+	header.minY = integerDecode_CBT(br, 16);
+	header.maxW = integerDecode_CBT(br, 16) + 1;
+	header.maxH = integerDecode_CBT(br, 16) + 1;
+	return true;
 }
 

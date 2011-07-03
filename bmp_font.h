@@ -28,6 +28,14 @@ public:
 	uint8_t idx_;
 };
 
-void Decode(BitmapFont& bf, class BitReader& br);
+struct BmpFontHeader
+{
+	uint16_t characterCount;
+	uint16_t* characterCodes;
+	uint8_t minX;
+	uint8_t minY;
+	uint8_t maxW;
+	uint8_t maxH;
+};
 
 #endif // #ifndef RASTERIZER_H_INCLUDED__

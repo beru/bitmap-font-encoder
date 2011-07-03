@@ -3,6 +3,7 @@
 
 #include "bmp_font.h"
 
-void Decode(BitmapFont& bf, BitReader& br);
+bool DecodeHeader(class BitReader& br, BmpFontHeader& header);
+void Decode(class BitReader& br, BitmapFont& bf, const BmpFontHeader& fontInfo);
 
 #endif // #ifndef BMP_FONT_DECODE_H__

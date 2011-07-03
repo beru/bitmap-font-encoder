@@ -3,6 +3,7 @@
 #include <algorithm>
 #include "bit_writer.h"
 #include "misc.h"
+#include "integer_coding.h"
 
 struct FillInfo
 {
@@ -14,119 +15,6 @@ struct FillInfo
 bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 {
 	return lhs.p1 < rhs.p1;
-}
-
-// http://www.hackersdelight.org/HDcode/flp2.c.txt
-/* Round down to a power of 2. */
-unsigned flp2_16(uint16_t x) {
-   x = x | (x >> 1);
-   x = x | (x >> 2);
-   x = x | (x >> 4);
-   x = x | (x >> 8);
-   return x - (x >> 1);
-}
-
-uint8_t log2(uint32_t v) {
-	int r;      // result goes here
-
-	static const int MultiplyDeBruijnBitPosition[32] = 
-	{
-	  0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30,
-	  8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31
-	};
-
-	v |= v >> 1; // first round down to one less than a power of 2 
-	v |= v >> 2;
-	v |= v >> 4;
-	v |= v >> 8;
-	v |= v >> 16;
-
-	r = MultiplyDeBruijnBitPosition[(uint32_t)(v * 0x07C4ACDDU) >> 27];
-	return r;
-}
-
-void integerEncode_Alpha(BitWriter& bw, uint16_t n)
-{
-	for (uint16_t i=0; i<n; ++i) {
-		bw.Push(0);
-	}
-	bw.Push(1);
-}
-
-void integerEncode_Gamma(BitWriter& bw, uint16_t v)
-{
-	if (v == 0) {
-		bw.Push(1);
-		return;
-	}
-	uint8_t n = log2(v+1);
-	uint16_t remain = v - (1<<n) + 1;
-	integerEncode_Alpha(bw, n);
-	for (uint8_t i=0; i<n; ++i) {
-		bw.Push((remain >> (n-1-i)) & 1);
-	}
-}
-
-void integerEncode_Delta(BitWriter& bw, uint16_t v)
-{
-	if (v == 0) {
-		bw.Push(1);
-		return;
-	}
-	uint8_t n = log2(v+1);
-	uint16_t remain = v - (1<<n) + 1;
-	integerEncode_Gamma(bw, n);
-	for (uint8_t i=0; i<n; ++i) {
-		bw.Push((remain >> (n-1-i)) & 1);
-	}
-}
-
-void testIntergerCoding()
-{
-	uint8_t buff[128];
-	BitWriter bw;
-	bw.Set(buff);
-	for (uint16_t i=0; i<255; ++i) {
-		integerEncode_Gamma(bw, i);
-TRACE("\r\n");
-	}
-}
-
-void encodeNum(BitWriter& bw, uint8_t n, uint8_t m)
-{
-	assert(m >= 1 && m <= 16);
-	assert(n >= 0 && n < m);
-	if (m == 1) {
-		return;
-	}
-	uint8_t p2 = pow2roundup(m);
-	if (n < p2-m) {
-		uint8_t nBits = countBits8(p2-1)-1;
-		for (uint8_t i=0; i<nBits; ++i) {
-			bw.Push((n >> (nBits-1-i)) & 1);
-		}
-	}else {
-		uint8_t nBits = countBits8(p2-1);
-		n += p2 - m;
-		for (uint8_t i=0; i<nBits; ++i) {
-			bw.Push((n >> (nBits-1-i)) & 1);
-		}
-	}
-}
-
-uint8_t calcEncodedLen(uint8_t n, uint8_t m)
-{
-	assert(n >= 0 && n < m);
-	if (m == 1) {
-		return 0;
-	}
-	uint8_t p2 = pow2roundup(m);
-	uint8_t nBits = countBits8(p2-1);
-	if (n < p2-m) {
-		return nBits - 1;
-	}else {
-		return nBits;
-	}
 }
 
 static
@@ -171,7 +59,7 @@ void buildCommands(
 	for (uint8_t i=0; i<len1; ++i) {
 		maxLen2 = std::max(maxLen2, len2s[i]);
 	}
-	encodeNum(bw, maxLen-1, maxLen2);
+	integerEncode_CBT(bw, maxLen-1, maxLen2);
 	
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
@@ -199,13 +87,13 @@ void buildCommands(
 			if (offset == 0) {
 				// offset == 0 do not record
 			}else {
-				encodeNum(bw, offset, len2-col);
+				integerEncode_CBT(bw, offset, len2-col);
 			}
 			assert(fi.len == 1);
 			// len == 1 do not record
 		}else {
-			encodeNum(bw, offset, len2-col);
-			encodeNum(bw, fi.len-1, std::min(maxLen, remain));
+			integerEncode_CBT(bw, offset, len2-col);
+			integerEncode_CBT(bw, fi.len-1, std::min(maxLen, remain));
 		}
 
 		if (col == 0) {
@@ -427,11 +315,11 @@ void searchFills(
 			// 始点の左側に縦方向の塗りつぶしがある場合、左方向に延長しても容量が増えないかどうか判定
 			if (values[fi.p1][fi.p2-1]) {
 				assert(values[fi.p1][fi.p2-1] == 1);
-				uint8_t oldBitLen = calcEncodedLen(fi.p2, w) + calcEncodedLen(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+				uint8_t oldBitLen = calcIntegerEncodedLength_CBT(fi.p2, w) + calcIntegerEncodedLength_CBT(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
 				uint8_t newP2 = fi.p2 - 1;
 				uint8_t newLen = fi.len + 1;
 				if (newLen <= maxLen) {
-					uint8_t newBitLen = calcEncodedLen(newP2, w) + calcEncodedLen(newLen-1, std::min(maxLen, (uint8_t)(w-newP2)));
+					uint8_t newBitLen = calcIntegerEncodedLength_CBT(newP2, w) + calcIntegerEncodedLength_CBT(newLen-1, std::min(maxLen, (uint8_t)(w-newP2)));
 					if (newBitLen <= oldBitLen) {
 						values[fi.p1][fi.p2-1] = PIXEL_X;
 						--fi.p2;
@@ -444,10 +332,10 @@ void searchFills(
 			// 終点の右側に縦方向の塗りつぶしがある場合、右方向に延長しても容量が増えないかどうか判定
 			if (values[fi.p1][fi.p2+fi.len]) {
 				assert(values[fi.p1][fi.p2+fi.len] == 1);
-				uint8_t oldBitLen = calcEncodedLen(fi.p2, w) + calcEncodedLen(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+				uint8_t oldBitLen = calcIntegerEncodedLength_CBT(fi.p2, w) + calcIntegerEncodedLength_CBT(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
 				uint8_t newLen = fi.len + 1;
 				if (newLen <= maxLen) {
-					uint8_t newBitLen = calcEncodedLen(fi.p2, w) + calcEncodedLen(newLen-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+					uint8_t newBitLen = calcIntegerEncodedLength_CBT(fi.p2, w) + calcIntegerEncodedLength_CBT(newLen-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
 					if (newBitLen <= oldBitLen) {
 						assert(newBitLen == oldBitLen);
 						values[fi.p1][fi.p2+fi.len] = PIXEL_X;
@@ -504,22 +392,20 @@ void push16(BitWriter& bw, uint16_t u)
 }
 
 std::string EncodeHeader(
-	BitWriter& bw,
-	uint16_t strCount, const uint16_t* codes,
-	uint8_t minX, uint8_t minY, uint8_t maxW, uint8_t maxH
+	BitWriter& bw,const BmpFontHeader& header
 	)
 {
-//	testIntergerCoding();
+	testIntergerCoding();
 	
-	push16(bw, strCount);
-	assert(strCount != 0);
-	uint16_t code = codes[0];
+	push16(bw, header.characterCount);
+	assert(header.characterCount != 0);
+	uint16_t code = header.characterCodes[0];
 	push16(bw, code);
 	uint16_t prevCode = code;
 
 	uint16_t dist[4096] = {0};
-	for (uint16_t i=1; i<strCount; ++i) {
-		uint16_t code = codes[i];
+	for (uint16_t i=1; i<header.characterCount; ++i) {
+		uint16_t code = header.characterCodes[i];
 		int diff = code - prevCode;
 		assert(diff > 0);
 		++dist[diff];
@@ -527,21 +413,20 @@ std::string EncodeHeader(
 		prevCode = code;
 	}
 	
-	encodeNum(bw, minX, 16);
-	encodeNum(bw, minY, 16);
-	encodeNum(bw, maxW-1, 16);
-	encodeNum(bw, maxH-1, 16);
+	integerEncode_CBT(bw, header.minX, 16);
+	integerEncode_CBT(bw, header.minY, 16);
+	integerEncode_CBT(bw, header.maxW-1, 16);
+	integerEncode_CBT(bw, header.maxH-1, 16);
 
 	char buff[64];
-	sprintf(buff, "%d %d %d %d\r\n", minX, minY, maxW, maxH);
+	sprintf(buff, "%d %d %d %d\r\n", header.minX, header.minY, header.maxW, header.maxH);
 	return buff;
 }
 
 std::string Encode(
 	BitWriter& bw,
 	const BitmapFont& bf,
-	uint8_t minX, uint8_t minY, uint8_t maxW, uint8_t maxH
-	
+	const BmpFontHeader& fontInfo
 	)
 {
 	std::vector<FillInfo> hFills;
@@ -560,22 +445,25 @@ std::string Encode(
 	sprintf(buff, "(%d %d %d %d)", bf.x_, bf.y_, bf.w_, bf.h_);
 	cmds.push_back(buff);
 	
-	uint8_t recX = bf.x_ - minX;
-	uint8_t recY = bf.y_ - minY;
+	uint8_t recX = bf.x_ - fontInfo.minX;
+	uint8_t recY = bf.y_ - fontInfo.minY;
+	uint8_t recW = fontInfo.maxW - (recX + bf.w_);
+	uint8_t recH = fontInfo.maxH - (recY + bf.h_);
 	// TODO: 0より1が圧倒的に多いので…。。ただ要適切に対処
-	integerEncode_Alpha(bw, (recX == 0 ? 15 : recX-1));
+	recX = (recX == 0 ? 15 : recX-1);
+	integerEncode_Alpha(bw, recX);
 	integerEncode_Alpha(bw, recY);
 //	assert(bf.w_ != 0 && bf.h_ != 0);
-	integerEncode_Alpha(bw, maxW - (recX + bf.w_));
-	integerEncode_Alpha(bw, maxH - (recY + bf.h_));
+	integerEncode_Alpha(bw, recW);
+	integerEncode_Alpha(bw, recH);
 	
 	// dist
 	{
 		extern uint16_t g_dist[17][16];
-		++g_dist[0][bf.x_];
-		++g_dist[1][bf.y_];
-		++g_dist[2][bf.w_];
-		++g_dist[3][bf.w_];
+		++g_dist[0][recX];
+		++g_dist[1][recY];
+		++g_dist[2][recW];
+		++g_dist[3][recH];
 	}
 	
 	buildCommands(bw, cmds, hFills, bf.h_, hlens);
