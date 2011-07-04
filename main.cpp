@@ -102,9 +102,11 @@ void encodeCharacters(
 		uint16_t idx = idxs[i];
 		loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, bitmapData);
 		bmpFont.Compact();
-		fputs(bmpFont.Dump().c_str(), of);
-		fputs("\r\n", of);
+//		fputs(bmpFont.Dump().c_str(), of);
+//		fputs("\r\n", of);
 		size_t oldNBits = bitWriter.GetNBits();
+TRACE("%d\r\n", bitWriter.GetNBits());
+
 //			fputs(
 			Encode(bitWriter, bmpFont, bmpFontHeader).c_str()
 //			, of)
@@ -126,8 +128,10 @@ void decodeCharacters(const uint8_t* pData, size_t bytes, FILE* f)
 	}
 	BitmapFont bf;
 	for (uint16_t i=0; i<header.characterCount; ++i) {
+TRACE("%d\r\n", bitReader.GetTotalCounter());
 		Decode(bitReader, bf, header);
 		fputs(bf.Dump().c_str(), f);
+		fputs("\r\n", f);
 	}
 }
 
@@ -180,7 +184,7 @@ int main(int argc, char* argv[])
 		bitWriter.Set(&dest[0]);
 
 		std::vector<uint16_t> idxs;
-#if 0
+#if 1
 		const size_t strLen = header.CHARS;
 		idxs.resize(strLen);
 		for (size_t i=0; i<strLen; ++i) {
@@ -218,9 +222,9 @@ int main(int argc, char* argv[])
 		fprintf(of, "total num of killo bytes : %f\r\n", totalBits/8.0/1024);
 		int hoge = 0;
 
-		of = fopen("output.bin", "wb");
-		fwrite(&dest[0], 1, bitWriter.GetNBytes(), of);
-		fclose(of);
+		FILE* f = fopen("output.bin", "wb");
+		fwrite(&dest[0], 1, bitWriter.GetNBytes(), f);
+		fclose(f);
 	}
 	
 	// decode test

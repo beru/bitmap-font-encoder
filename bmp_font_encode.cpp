@@ -57,7 +57,9 @@ void buildCommands(
 	cmds.push_back(buff);
 	uint8_t maxLen2 = 0;
 	for (uint8_t i=0; i<len1; ++i) {
-		maxLen2 = std::max(maxLen2, len2s[i]);
+		if (lineFlags & (1<<i)) {
+			maxLen2 = std::max(maxLen2, len2s[i]);
+		}
 	}
 	integerEncode_CBT(bw, maxLen-1, maxLen2);
 	
@@ -395,7 +397,7 @@ std::string EncodeHeader(
 	BitWriter& bw,const BmpFontHeader& header
 	)
 {
-	testIntergerCoding();
+//	testIntergerCoding();
 	
 	push16(bw, header.characterCount);
 	assert(header.characterCount != 0);

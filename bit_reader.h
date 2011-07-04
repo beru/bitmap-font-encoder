@@ -32,6 +32,8 @@ public:
 	
 	size_t nBytes() const { return (src_ - initialSrc_) + (counter_ ? 1 : 0); }
 	
+	uint32_t GetTotalCounter() const { return totalCounter_; }
+
 private:
 	uint32_t totalCounter_;
 	unsigned char counter_;
