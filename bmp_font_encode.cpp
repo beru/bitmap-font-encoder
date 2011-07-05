@@ -56,6 +56,7 @@ void buildCommands(
 	sprintf(buff, "max line length : %d", maxLen);
 	cmds.push_back(buff);
 	uint8_t maxLen2 = 0;
+	// 縦面の場合の事も考えて最大線長を再度収集する
 	for (uint8_t i=0; i<len1; ++i) {
 		if (lineFlags & (1<<i)) {
 			maxLen2 = std::max(maxLen2, len2s[i]);
@@ -106,6 +107,94 @@ void buildCommands(
 		col += fi.len + 1;
 	}
 	if (col < len2s[row]) {
+		bw.Push(false);
+		cmds.push_back("next line");
+	}
+}
+
+static
+void buildHorizontalCommands(
+	BitWriter& bw,
+	std::vector<std::string>& cmds,
+	const std::vector<FillInfo>& fills,
+	uint8_t len1,
+	uint8_t len2
+	)
+{
+	if (fills.size() == 0) {
+		// 全部改行！
+		for (uint8_t i=0; i<len1; ++i) {
+			cmds.push_back("row 0");
+			bw.Push(false);
+		}
+		return;
+	}
+	
+	// 空行かどうかの記録
+	uint16_t lineFlags = 0;
+	uint8_t maxLen = 1;
+	for (size_t i=0; i<fills.size(); ++i) {
+		const FillInfo& fi = fills[i];
+		maxLen = std::max(maxLen, fi.len);
+		lineFlags |= 1 << fi.p1;
+	}
+	for (uint8_t i=0; i<len1; ++i) {
+		bw.Push(lineFlags & (1<<i));
+		if (lineFlags & (1<<i)) {
+			cmds.push_back("row 1");
+		}else {
+			cmds.push_back("row 0");
+		}
+	}
+	// 最大線長の記録
+	assert(maxLen >= 2);
+	char buff[32];
+	sprintf(buff, "max line length : %d", maxLen);
+	cmds.push_back(buff);
+	integerEncode_CBT(bw, maxLen-2, len2);
+	
+	uint8_t col = 0;
+	uint8_t row = fills[0].p1;
+	for (size_t i=0; i<fills.size(); ++i) {
+		const FillInfo& fi = fills[i];
+		if (row != fi.p1) {
+			if (col < len2) {
+				bw.Push(false);
+				cmds.push_back("next line");
+			}
+			col = 0;
+		}
+		row = fi.p1;
+		char buff[32];
+		uint8_t offset = fi.p2 - col;
+		sprintf(buff, "fill %d %d", offset, fi.len);
+		cmds.push_back(buff);
+		
+		if (col != 0) {
+			bw.Push(true); // fill sign
+		}
+		uint8_t remain = len2 - fi.p2;
+		if (remain < 3) {
+			if (offset == 0) {
+				// offset == 0 do not record
+			}else {
+				integerEncode_CBT(bw, offset, len2-col);
+			}
+			assert(fi.len == 2);
+			// len == 1 do not record
+		}else {
+			integerEncode_CBT(bw, offset, len2-col);
+			integerEncode_CBT(bw, fi.len-2, std::min((uint8_t)(maxLen-1), (uint8_t)(remain-1)));
+		}
+
+		if (col == 0) {
+			col = fi.p2;
+		}else {
+			col += offset;
+		}
+		col += fi.len + 1;
+	}
+	if (col < len2) {
 		bw.Push(false);
 		cmds.push_back("next line");
 	}
@@ -194,24 +283,26 @@ void searchFills(
 	const uint8_t h = values.GetHeight();
 	
 	// 横方向の線の完全塗りつぶしを最初に調査
-	for (uint8_t y=0; y<h; ++y) {
-		uint8_t x;
-		for (x=0; x<w; ++x) {
-			if (!values[y][x]) {
-				break;
+	if (w > 1) {
+		for (uint8_t y=0; y<h; ++y) {
+			uint8_t x;
+			for (x=0; x<w; ++x) {
+				if (!values[y][x]) {
+					break;
+				}
 			}
-		}
-		if (x != w) {
-			continue;
-		}
-		FillInfo fi;
-		fi.p1 = y;
-		fi.p2 = 0;
-		fi.len = w;
-		hFills.push_back(fi);
+			if (x != w) {
+				continue;
+			}
+			FillInfo fi;
+			fi.p1 = y;
+			fi.p2 = 0;
+			fi.len = w;
+			hFills.push_back(fi);
 
-		for (x=0; x<w; ++x) {
-			values[y][x] = PIXEL_X;
+			for (x=0; x<w; ++x) {
+				values[y][x] = PIXEL_X;
+			}
 		}
 	}
 	// 横方向の塗りつぶし情報収集
@@ -263,6 +354,7 @@ void searchFills(
 			}
 
 			//// 横方向に1pixel ////
+			continue;
 
 			// 上下に縦方向の連続塗りつぶしがある場合
 			if (
@@ -435,8 +527,6 @@ std::string Encode(
 	std::vector<FillInfo> vFills;
 	
 	Array2D<uint8_t> values = bf.values_;
-	uint8_t hlens[16];
-	for (uint8_t i=0; i<bf.h_; ++i) { hlens[i] = bf.w_; }
 	uint8_t vlens[16];
 	searchFills(values, hFills, vFills, vlens);
 	std::sort(hFills.begin(), hFills.end());
@@ -468,7 +558,7 @@ std::string Encode(
 		++g_dist[3][recH];
 	}
 	
-	buildCommands(bw, cmds, hFills, bf.h_, hlens);
+	buildHorizontalCommands(bw, cmds, hFills, bf.h_, bf.w_);
 	buildCommands(bw, cmds, vFills, bf.w_, vlens);
 	
 	std::string ret;

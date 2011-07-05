@@ -22,7 +22,7 @@ void decodeHorizontalFills(
 	if (!lineFlags) {
 		return;
 	}
-	uint8_t maxLen = integerDecode_CBT(br, w) + 1;
+	uint8_t maxLen = integerDecode_CBT(br, w) + 2;
 	uint8_t row = ntz(lineFlags);
 	uint8_t col = 0;
 	do {
@@ -36,19 +36,21 @@ void decodeHorizontalFills(
 			}
 		}
 		uint8_t remain = w - col;
-		if (remain == 1) {
-			// fillLen = 1
+		if (remain <= 2) {
+			// fillLen = 2
 			values[row][col] = 1;
-			col += 1;
+			values[row][col+1] = 1;
+			col += 2;
 		}else {
 			uint8_t offset = integerDecode_CBT(br, remain);
 			col += offset;
-			if (w - col == 1) {
-				// fillLen = 1
+			if (w - col <= 2) {
+				// fillLen = 2
 				values[row][col] = 1;
-				col += 1;
+				values[row][col+1] = 1;
+				col += 2;
 			}else {
-				uint8_t len = integerDecode_CBT(br, std::min(maxLen, (uint8_t)(w-col))) + 1;
+				uint8_t len = integerDecode_CBT(br, std::min(maxLen, (uint8_t)(w-col))) + 2;
 				for (uint8_t i=0; i<len; ++i) {
 					values[row][col+i] = 1;
 				}

@@ -228,7 +228,7 @@ int main(int argc, char* argv[])
 	}
 	
 	// decode test
-	{
+	if (1) {
 		FILE* f = fopen("output.bin", "rb");
 		size_t fileSize = GetFileSize(f);
 		std::vector<uint8_t> data(fileSize);
