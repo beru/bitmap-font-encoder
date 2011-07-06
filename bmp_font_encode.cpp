@@ -18,7 +18,7 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 }
 
 static
-void buildCommands(
+void buildVerticalCommands(
 	BitWriter& bw,
 	std::vector<std::string>& cmds,
 	const std::vector<FillInfo>& fills,
@@ -151,42 +151,44 @@ void buildHorizontalCommands(
 	char buff[32];
 	sprintf(buff, "max line length : %d", maxLen);
 	cmds.push_back(buff);
-	integerEncode_CBT(bw, maxLen-2, len2);
+	integerEncode_CBT(bw, maxLen-2, len2-1);
 	
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
 		const FillInfo& fi = fills[i];
 		if (row != fi.p1) {
-			if (col < len2) {
+			if (col < len2-1) {
 				bw.Push(false);
 				cmds.push_back("next line");
 			}
 			col = 0;
 		}
 		row = fi.p1;
-		char buff[32];
 		uint8_t offset = fi.p2 - col;
+		
+		char buff[32];
 		sprintf(buff, "fill %d %d", offset, fi.len);
 		cmds.push_back(buff);
 		
 		if (col != 0) {
 			bw.Push(true); // fill sign
 		}
+		assert(fi.p2 <= len2-2);
 		uint8_t remain = len2 - fi.p2;
-		if (remain < 3) {
+		if (remain <= 2) {
 			if (offset == 0) {
 				// offset == 0 do not record
 			}else {
-				integerEncode_CBT(bw, offset, len2-col);
+				integerEncode_CBT(bw, offset, len2-1-col);
 			}
 			assert(fi.len == 2);
 			// len == 1 do not record
 		}else {
-			integerEncode_CBT(bw, offset, len2-col);
-			integerEncode_CBT(bw, fi.len-2, std::min((uint8_t)(maxLen-1), (uint8_t)(remain-1)));
+			integerEncode_CBT(bw, offset, len2-1-col);
+			integerEncode_CBT(bw, fi.len-2, std::min(maxLen, remain)-1);
 		}
-
+		
 		if (col == 0) {
 			col = fi.p2;
 		}else {
@@ -355,38 +357,6 @@ void searchFills(
 
 			//// 横方向に1pixel ////
 			continue;
-
-			// 上下に縦方向の連続塗りつぶしがある場合
-			if (
-				(y != 0 && values[y-1][x])
-				|| (y != h-1 && values[y+1][x])
-			) {
-				// もし最後の列で１つ前の位置に横の記録があるなら、改行の1bitも、データがあるの1bitも容量は同じなのでデータを置く。
-				if (x == w-1 && values[y][x-2] == PIXEL_X) {
-
-				}else {
-					continue;
-				}
-			}
-			
-			// 横方向の最後に置いてある単独の塗りつぶしは改行情報も長さ情報も省けるので、横方向で採用する。
-			if (x != w-1) {
-				// 縦方向の最後や最後の１つ手前にある単独の塗りつぶしは、縦方向で採用すればそちらの改行情報を省けるので、横方向では採用しない。
-				if (y >= h-2) {
-					continue;
-				}
-				// 幅１の塗りつぶしで、左端からの距離より上端からの距離の方が大きい場合は、横方向では採用しない。
-				if (w-x > h-y) {
-					continue;
-				}
-			}
-
-			FillInfo fi;
-			fi.p1 = y;
-			fi.p2 = x;
-			fi.len = 1;
-			hFills.push_back(fi);
-			line[x] = PIXEL_X;
 		}
 	}
 
@@ -409,7 +379,7 @@ void searchFills(
 			// 始点の左側に縦方向の塗りつぶしがある場合、左方向に延長しても容量が増えないかどうか判定
 			if (values[fi.p1][fi.p2-1]) {
 				assert(values[fi.p1][fi.p2-1] == 1);
-				uint8_t oldBitLen = calcIntegerEncodedLength_CBT(fi.p2, w) + calcIntegerEncodedLength_CBT(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+				uint8_t oldBitLen = calcIntegerEncodedLength_CBT(fi.p2, w-1) + calcIntegerEncodedLength_CBT(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
 				uint8_t newP2 = fi.p2 - 1;
 				uint8_t newLen = fi.len + 1;
 				if (newLen <= maxLen) {
@@ -426,10 +396,10 @@ void searchFills(
 			// 終点の右側に縦方向の塗りつぶしがある場合、右方向に延長しても容量が増えないかどうか判定
 			if (values[fi.p1][fi.p2+fi.len]) {
 				assert(values[fi.p1][fi.p2+fi.len] == 1);
-				uint8_t oldBitLen = calcIntegerEncodedLength_CBT(fi.p2, w) + calcIntegerEncodedLength_CBT(fi.len-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+				uint8_t oldBitLen = calcIntegerEncodedLength_CBT(fi.p2, w-1) + calcIntegerEncodedLength_CBT(fi.len-2, std::min(maxLen, (uint8_t)(w-fi.p2))-1);
 				uint8_t newLen = fi.len + 1;
 				if (newLen <= maxLen) {
-					uint8_t newBitLen = calcIntegerEncodedLength_CBT(fi.p2, w) + calcIntegerEncodedLength_CBT(newLen-1, std::min(maxLen, (uint8_t)(w-fi.p2)));
+					uint8_t newBitLen = calcIntegerEncodedLength_CBT(fi.p2, w-1) + calcIntegerEncodedLength_CBT(newLen-2, std::min(maxLen, (uint8_t)(w-fi.p2))-1);
 					if (newBitLen <= oldBitLen) {
 						assert(newBitLen == oldBitLen);
 						values[fi.p1][fi.p2+fi.len] = PIXEL_X;
@@ -557,9 +527,26 @@ std::string Encode(
 		++g_dist[2][recW];
 		++g_dist[3][recH];
 	}
+
+	BitWriter bw2;
+	uint8_t buff2[128] = {0};
+	bw2.Set(buff2);
+
+	buildHorizontalCommands(bw2, cmds, hFills, bf.h_, bf.w_);
+	buildVerticalCommands(bw2, cmds, vFills, bf.w_, vlens);
 	
-	buildHorizontalCommands(bw, cmds, hFills, bf.h_, bf.w_);
-	buildCommands(bw, cmds, vFills, bf.w_, vlens);
+	if (bw2.GetNBits() < bf.w_*bf.h_) {
+		bw.Push(true);
+		buildHorizontalCommands(bw, cmds, hFills, bf.h_, bf.w_);
+		buildVerticalCommands(bw, cmds, vFills, bf.w_, vlens);
+	}else {
+		bw.Push(false);
+		for (uint8_t y=0; y<bf.h_; ++y) {
+			for (uint8_t x=0; x<bf.w_; ++x) {
+				bw.Push(bf.values_[y][x]);
+			}
+		}
+	}
 	
 	std::string ret;
 	for (size_t i=0; i<cmds.size(); ++i) {

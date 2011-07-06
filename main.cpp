@@ -102,10 +102,10 @@ void encodeCharacters(
 		uint16_t idx = idxs[i];
 		loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, bitmapData);
 		bmpFont.Compact();
-//		fputs(bmpFont.Dump().c_str(), of);
-//		fputs("\r\n", of);
+		fputs(bmpFont.Dump().c_str(), of);
+		fputs("\r\n", of);
 		size_t oldNBits = bitWriter.GetNBits();
-TRACE("%d\r\n", bitWriter.GetNBits());
+//TRACE("%d\r\n", bitWriter.GetNBits());
 
 //			fputs(
 			Encode(bitWriter, bmpFont, bmpFontHeader).c_str()
@@ -228,7 +228,7 @@ int main(int argc, char* argv[])
 	}
 	
 	// decode test
-	if (1) {
+	if (0) {
 		FILE* f = fopen("output.bin", "rb");
 		size_t fileSize = GetFileSize(f);
 		std::vector<uint8_t> data(fileSize);
