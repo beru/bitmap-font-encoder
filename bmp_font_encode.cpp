@@ -95,7 +95,11 @@ void buildVerticalCommands(
 			assert(fi.len == 1);
 			// len == 1 do not record
 		}else {
-			integerEncode_CBT(bw, offset, len2-col);
+			if (len2-col == 14) {
+				integerEncode_Custom14(bw, offset);
+			}else {
+				integerEncode_CBT(bw, offset, len2-col);
+			}
 			integerEncode_CBT(bw, fi.len-1, std::min(maxLen, remain));
 		}
 
@@ -185,7 +189,11 @@ void buildHorizontalCommands(
 			assert(fi.len == 2);
 			// len == 1 do not record
 		}else {
-			integerEncode_CBT(bw, offset, len2-1-col);
+			if (len2-1-col == 14 && row != len1-1) {
+				integerEncode_Custom14(bw, offset);
+			}else {
+				integerEncode_CBT(bw, offset, len2-1-col);
+			}
 			integerEncode_CBT(bw, fi.len-2, std::min(maxLen, remain)-1);
 		}
 		
@@ -521,11 +529,23 @@ std::string Encode(
 	
 	// dist
 	{
-		extern uint16_t g_dist[17][16];
-		++g_dist[0][recX];
-		++g_dist[1][recY];
-		++g_dist[2][recW];
-		++g_dist[3][recH];
+		extern uint16_t g_dist[16][16][16];
+#if 1
+//		static uint8_t s_lastP1 = -1;
+//		s_lastP1 = -1;
+		for (size_t i=0; i<hFills.size(); ++i) {
+			const FillInfo& fi = hFills[i];
+//			if (fi.p1 == s_lastP1) {
+//				continue;
+//			}
+			++g_dist[ 0 ][ bf.w_ - fi.p2 - 2 ][ fi.len - 2 ];
+//			s_lastP1 = fi.p1;
+		}
+		for (size_t i=0; i<vFills.size(); ++i) {
+			const FillInfo& fi = vFills[i];
+			++g_dist[ 1 ][ bf.h_ - fi.p2 - 1 ][ fi.len - 1 ];
+		}
+#endif
 	}
 
 	BitWriter bw2;

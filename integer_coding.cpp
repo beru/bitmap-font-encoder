@@ -12,6 +12,15 @@ void integerEncode_Alpha(BitWriter& bw, uint16_t n)
 	bw.Push(1);
 }
 
+uint16_t integerDecode_Alpha(BitReader& br)
+{
+	uint16_t cnt = 0;
+	while (br.Pop() == 0) {
+		++cnt;
+	}
+	return cnt;
+}
+
 void integerEncode_Gamma(BitWriter& bw, uint16_t v)
 {
 	if (v == 0) {
@@ -26,6 +35,20 @@ void integerEncode_Gamma(BitWriter& bw, uint16_t v)
 	}
 }
 
+uint16_t integerDecode_Gamma(BitReader& br)
+{
+	bool b = br.Pop();
+	if (b) {
+		return 0;
+	}
+	uint8_t n = 1 + integerDecode_Alpha(br);
+	uint16_t remain = 0;
+	for (uint8_t i=0; i<n; ++i) {
+		remain |= br.Pop() << (n-1-i);
+	}
+	return (1 << n) - 1 + remain;
+}
+
 void integerEncode_Delta(BitWriter& bw, uint16_t v)
 {
 	if (v == 0) {
@@ -38,6 +61,21 @@ void integerEncode_Delta(BitWriter& bw, uint16_t v)
 	for (uint8_t i=0; i<n; ++i) {
 		bw.Push((remain >> (n-1-i)) & 1);
 	}
+}
+
+uint16_t integerDecode_Delta(BitReader& br)
+{
+	bool b = br.Front();
+	if (b) {
+		br.Pop();
+		return 0;
+	}
+	uint8_t n = integerDecode_Gamma(br);
+	uint16_t remain = 0;
+	for (uint8_t i=0; i<n; ++i) {
+		remain |= br.Pop() << (n-1-i);
+	}
+	return (1 << n) + remain - 1;
 }
 
 void integerEncode_CBT(BitWriter& bw, uint8_t n, uint8_t m)
@@ -62,21 +100,6 @@ void integerEncode_CBT(BitWriter& bw, uint8_t n, uint8_t m)
 	}
 }
 
-uint8_t calcIntegerEncodedLength_CBT(uint8_t n, uint8_t m)
-{
-	assert(n >= 0 && n < m);
-	if (m == 1) {
-		return 0;
-	}
-	uint8_t p2 = pow2roundup(m);
-	uint8_t nBits = countBits8(p2-1);
-	if (n < p2-m) {
-		return nBits - 1;
-	}else {
-		return nBits;
-	}
-}
-
 uint8_t integerDecode_CBT(BitReader& br, uint8_t maxNum)
 {
 	assert(maxNum >= 1 && maxNum <= 16);
@@ -98,44 +121,41 @@ uint8_t integerDecode_CBT(BitReader& br, uint8_t maxNum)
 	return ret;
 }
 
-uint16_t integerDecode_Alpha(BitReader& br)
+uint8_t calcIntegerEncodedLength_CBT(uint8_t n, uint8_t m)
 {
-	uint16_t cnt = 0;
-	while (br.Pop() == 0) {
-		++cnt;
-	}
-	return cnt;
-}
-
-uint16_t integerDecode_Gamma(BitReader& br)
-{
-	bool b = br.Pop();
-	if (b) {
+	assert(n >= 0 && n < m);
+	if (m == 1) {
 		return 0;
 	}
-	uint8_t n = 1 + integerDecode_Alpha(br);
-	uint16_t remain = 0;
-	for (uint8_t i=0; i<n; ++i) {
-		remain |= br.Pop() << (n-1-i);
+	uint8_t p2 = pow2roundup(m);
+	uint8_t nBits = countBits8(p2-1);
+	if (n < p2-m) {
+		return nBits - 1;
+	}else {
+		return nBits;
 	}
-	return (1 << n) - 1 + remain;
 }
 
-uint16_t integerDecode_Delta(BitReader& br)
+void integerEncode_Custom14(BitWriter& bw, uint8_t n)
 {
-	bool b = br.Front();
-	if (b) {
-		br.Pop();
-		return 0;
+	assert(n < 14);
+	switch (n) {
+	case 0: bw.Push(0,0,0); break;
+	case 1: bw.Push(0,0,1); break;
+	case 2: bw.Push(0,1,0); break;
+	case 3: bw.Push(0,1,1,0); break;
+	case 4: bw.Push(0,1,1,1); break;
+	case 5: bw.Push(1,0,0,0); break;
+	case 6: bw.Push(1,0,0,1); break;
+	case 7: bw.Push(1,0,1,0); break;
+	case 8: bw.Push(1,0,1,1); break;
+	case 9: bw.Push(1,1,0,0); break;
+	case 10: bw.Push(1,1,0,1); break;
+	case 11: bw.Push(1,1,1,0); break;
+	case 12: bw.Push(1,1,1,1,0); break;
+	case 13: bw.Push(1,1,1,1,1); break;
 	}
-	uint8_t n = integerDecode_Gamma(br);
-	uint16_t remain = 0;
-	for (uint8_t i=0; i<n; ++i) {
-		remain |= br.Pop() << (n-1-i);
-	}
-	return (1 << n) + remain - 1;
 }
-
 
 void testIntergerCoding()
 {

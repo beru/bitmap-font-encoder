@@ -56,7 +56,7 @@ void loadUnicodeBDFdata(
 	loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, data);
 }
 
-uint16_t g_dist[16][16];
+uint16_t g_dist[16][16][16];
 
 void encodeCharacters(
 	const BDF::Header& header,
@@ -102,8 +102,8 @@ void encodeCharacters(
 		uint16_t idx = idxs[i];
 		loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, bitmapData);
 		bmpFont.Compact();
-		fputs(bmpFont.Dump().c_str(), of);
-		fputs("\r\n", of);
+//		fputs(bmpFont.Dump().c_str(), of);
+//		fputs("\r\n", of);
 		size_t oldNBits = bitWriter.GetNBits();
 //TRACE("%d\r\n", bitWriter.GetNBits());
 
