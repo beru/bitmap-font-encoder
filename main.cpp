@@ -9,6 +9,7 @@
 #include "bmp_font_encode.h"
 #include "bmp_font_decode.h"
 #include <algorithm>
+#include <functional>
 
 // encoding code to segment index
 uint16_t encoding_idx_table[0xffff];
@@ -56,7 +57,64 @@ void loadUnicodeBDFdata(
 	loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, data);
 }
 
-uint16_t g_dist[16][16][16];
+uint16_t g_dist[17][17][17];
+
+struct CHC_Entry {
+	uint16_t num;
+	uint16_t cnt;
+};
+
+bool operator < (CHC_Entry& lhs, CHC_Entry& rhs) {
+	return lhs.cnt < rhs.cnt;
+}
+bool operator > (const CHC_Entry& lhs, const CHC_Entry& rhs) {
+	return lhs.cnt > rhs.cnt;
+}
+
+struct TreeNode
+{
+	uint8_t idx0;
+	uint8_t idx1;
+	uint16_t cnt;
+};
+
+void chcTest()
+{
+	
+	for (uint8_t t=2; t<=5; ++t) {
+		for (uint8_t i=0; i<17; ++i) {
+			uint8_t entryLen = 0;
+			CHC_Entry entries[16] = {0};
+			TreeNode nodes[16] = {0};
+			uint8_t nodeLen = 0;
+			for (uint8_t j=0; j<17; ++j) {
+				uint16_t v = g_dist[t][i][j];
+				if (v == 0) {
+					break;
+				}
+				assert(j <= 15);
+				CHC_Entry& e = entries[j];
+				e.num = j;
+				e.cnt = v;
+				++entryLen;
+			}
+			if (entryLen < 4) {
+				continue;
+			}
+			std::sort(entries, entries+entryLen, std::greater<CHC_Entry>());
+			
+			do {
+				TreeNode& nd = nodes[nodeLen++];
+
+				nd.idx0 = entryLen - 1;
+				nd.idx1 = entryLen - 2;
+				nd.cnt = nd[nd.idx0].cnt + nd[nd.idx1].cnt;
+			}while (1);
+
+
+		}
+	}
+}
 
 void encodeCharacters(
 	const BDF::Header& header,
@@ -226,6 +284,8 @@ int main(int argc, char* argv[])
 		fwrite(&dest[0], 1, bitWriter.GetNBytes(), f);
 		fclose(f);
 	}
+	
+	chcTest();
 	
 	// decode test
 	if (0) {

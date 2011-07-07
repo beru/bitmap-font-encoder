@@ -95,12 +95,16 @@ void buildVerticalCommands(
 			assert(fi.len == 1);
 			// len == 1 do not record
 		}else {
-			if (len2-col == 14) {
-				integerEncode_Custom14(bw, offset);
-			}else {
-				integerEncode_CBT(bw, offset, len2-col);
-			}
-			integerEncode_CBT(bw, fi.len-1, std::min(maxLen, remain));
+			integerEncode_CBT(bw, offset, len2-col);
+
+			uint8_t limit = std::min(maxLen, remain);
+			integerEncode_CBT(bw, fi.len-1, limit);
+{
+	extern uint16_t g_dist[17][17][17];
+	++g_dist[ 4 ][ len2-col ][ offset ];
+	assert(fi.len-1 <= 15);
+	++g_dist[ 5 ][ limit ][ fi.len - 1 ];
+}
 		}
 
 		if (col == 0) {
@@ -189,12 +193,13 @@ void buildHorizontalCommands(
 			assert(fi.len == 2);
 			// len == 1 do not record
 		}else {
-			if (len2-1-col == 14 && row != len1-1) {
-				integerEncode_Custom14(bw, offset);
-			}else {
-				integerEncode_CBT(bw, offset, len2-1-col);
-			}
+			integerEncode_CBT(bw, offset, len2-1-col);
 			integerEncode_CBT(bw, fi.len-2, std::min(maxLen, remain)-1);
+{
+	extern uint16_t g_dist[17][17][17];
+	++g_dist[ 2 ][ len2-1-col ][ offset ];
+	++g_dist[ 3 ][ std::min(maxLen, remain)-1 ][ fi.len - 2 ];
+}
 		}
 		
 		if (col == 0) {
@@ -529,7 +534,7 @@ std::string Encode(
 	
 	// dist
 	{
-		extern uint16_t g_dist[16][16][16];
+		extern uint16_t g_dist[17][17][17];
 #if 1
 //		static uint8_t s_lastP1 = -1;
 //		s_lastP1 = -1;
