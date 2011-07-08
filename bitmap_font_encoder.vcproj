@@ -191,6 +191,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\chc.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\code_convert.cpp"
 				>
 			</File>
@@ -238,6 +242,10 @@
 			</File>
 			<File
 				RelativePath=".\bmp_font_encode.h"
+				>
+			</File>
+			<File
+				RelativePath=".\chc.h"
 				>
 			</File>
 			<File

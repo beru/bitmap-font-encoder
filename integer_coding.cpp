@@ -136,27 +136,6 @@ uint8_t calcIntegerEncodedLength_CBT(uint8_t n, uint8_t m)
 	}
 }
 
-void integerEncode_Custom14(BitWriter& bw, uint8_t n)
-{
-	assert(n < 14);
-	switch (n) {
-	case 0: bw.Push(0,0,0); break;
-	case 1: bw.Push(0,0,1); break;
-	case 2: bw.Push(0,1,0); break;
-	case 3: bw.Push(0,1,1,0); break;
-	case 4: bw.Push(0,1,1,1); break;
-	case 5: bw.Push(1,0,0,0); break;
-	case 6: bw.Push(1,0,0,1); break;
-	case 7: bw.Push(1,0,1,0); break;
-	case 8: bw.Push(1,0,1,1); break;
-	case 9: bw.Push(1,1,0,0); break;
-	case 10: bw.Push(1,1,0,1); break;
-	case 11: bw.Push(1,1,1,0); break;
-	case 12: bw.Push(1,1,1,1,0); break;
-	case 13: bw.Push(1,1,1,1,1); break;
-	}
-}
-
 void testIntergerCoding()
 {
 	uint8_t buff[512];

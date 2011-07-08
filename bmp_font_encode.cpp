@@ -63,7 +63,10 @@ void buildVerticalCommands(
 		}
 	}
 	integerEncode_CBT(bw, maxLen-1, maxLen2);
-	
+{
+	extern uint16_t g_dist[17][17][17];
+	++g_dist[ 6 ][ maxLen2 ][ maxLen-1 ];
+}
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
@@ -91,12 +94,16 @@ void buildVerticalCommands(
 				// offset == 0 do not record
 			}else {
 				integerEncode_CBT(bw, offset, len2-col);
+{
+	extern uint16_t g_dist[17][17][17];
+	++g_dist[ 4 ][ len2-col ][ offset ];
+}
 			}
 			assert(fi.len == 1);
 			// len == 1 do not record
 		}else {
+			assert(fi.len >= 1);
 			integerEncode_CBT(bw, offset, len2-col);
-
 			uint8_t limit = std::min(maxLen, remain);
 			integerEncode_CBT(bw, fi.len-1, limit);
 {
@@ -160,7 +167,11 @@ void buildHorizontalCommands(
 	sprintf(buff, "max line length : %d", maxLen);
 	cmds.push_back(buff);
 	integerEncode_CBT(bw, maxLen-2, len2-1);
-	
+{
+	extern uint16_t g_dist[17][17][17];
+	++g_dist[ 6 ][ len2-1 ][ maxLen-2 ];
+}
+
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
@@ -189,10 +200,15 @@ void buildHorizontalCommands(
 				// offset == 0 do not record
 			}else {
 				integerEncode_CBT(bw, offset, len2-1-col);
+{
+	extern uint16_t g_dist[17][17][17];
+	++g_dist[ 2 ][ len2-1-col ][ offset ];
+}
 			}
 			assert(fi.len == 2);
 			// len == 1 do not record
 		}else {
+			assert(fi.len >= 2);
 			integerEncode_CBT(bw, offset, len2-1-col);
 			integerEncode_CBT(bw, fi.len-2, std::min(maxLen, remain)-1);
 {
@@ -531,7 +547,14 @@ std::string Encode(
 //	assert(bf.w_ != 0 && bf.h_ != 0);
 	integerEncode_Alpha(bw, recW);
 	integerEncode_Alpha(bw, recH);
-	
+{
+	extern uint16_t g_dist[17][17][17];
+	++g_dist[7][0][recX];
+	++g_dist[7][1][recY];
+	++g_dist[7][2][recW];
+	++g_dist[7][3][recH];
+}
+
 	// dist
 	{
 		extern uint16_t g_dist[17][17][17];
@@ -553,6 +576,10 @@ std::string Encode(
 #endif
 	}
 
+#if 1
+	buildHorizontalCommands(bw, cmds, hFills, bf.h_, bf.w_);
+	buildVerticalCommands(bw, cmds, vFills, bf.w_, vlens);
+#else
 	BitWriter bw2;
 	uint8_t buff2[128] = {0};
 	bw2.Set(buff2);
@@ -572,6 +599,7 @@ std::string Encode(
 			}
 		}
 	}
+#endif
 	
 	std::string ret;
 	for (size_t i=0; i<cmds.size(); ++i) {
