@@ -21,7 +21,7 @@ extern uint32_t g_dist[17][17][17];
 
 void recLineEmptyFlag(BitWriter& bw, bool isNotEmpty)
 {
-++g_dist[7][0][isNotEmpty];
+++g_dist[8][0][isNotEmpty];
 	bw.Push(isNotEmpty);
 }
 
@@ -52,14 +52,8 @@ void buildVerticalCommands(
 		maxLen = std::max(maxLen, fi.len);
 		lineFlags |= 1 << fi.p1;
 	}
-	for (uint8_t i=0; i<bf.x_; ++i) {
-		recLineEmptyFlag(bw, false);
-	}
 	for (uint8_t i=0; i<bf.w_; ++i) {
 		recLineEmptyFlag(bw, lineFlags & (1<<i));
-	}
-	for (uint8_t i=bf.x_+bf.w_; i<fontInfo.maxW; ++i) {
-		recLineEmptyFlag(bw, false);
 	}
 	// 最大線長の記録
 	char buff[32];
@@ -155,16 +149,10 @@ void buildHorizontalCommands(
 		maxLen = std::max(maxLen, fi.len);
 		lineFlags |= 1 << fi.p1;
 	}
-	for (uint8_t i=0; i<bf.y_; ++i) {
-		recLineEmptyFlag(bw, false);
-	}
 	for (uint8_t i=0; i<bf.h_; ++i) {
 		recLineEmptyFlag(bw, lineFlags & (1<<i));
 	}
-	for (uint8_t i=bf.y_+bf.h_; i<fontInfo.maxH; ++i) {
-		recLineEmptyFlag(bw, false);
-	}
-
+	
 	// 最大線長の記録
 	assert(maxLen >= 2);
 	char buff[32];
@@ -530,6 +518,24 @@ std::string Encode(
 	char buff[32];
 	sprintf(buff, "(%d %d %d %d)", bf.x_, bf.y_, bf.w_, bf.h_);
 	cmds.push_back(buff);
+	
+	uint8_t recX = bf.x_ - fontInfo.minX;
+	uint8_t recY = bf.y_ - fontInfo.minY;
+	uint8_t recW = fontInfo.maxW - (recX + bf.w_);
+	uint8_t recH = fontInfo.maxH - (recY + bf.h_);
+	// TODO: 0より1が圧倒的に多いので…。。ただ要適切に対処
+	recX = (recX == 0 ? 15 : recX-1);
+	integerEncode_Alpha(bw, recX);
+	integerEncode_Alpha(bw, recY);
+//	assert(bf.w_ != 0 && bf.h_ != 0);
+	integerEncode_Alpha(bw, recW);
+	integerEncode_Alpha(bw, recH);
+{
+	++g_dist[7][0][recX];
+	++g_dist[7][1][recY];
+	++g_dist[7][2][recW];
+	++g_dist[7][3][recH];
+}
 	
 #if 1
 	buildHorizontalCommands(bw, bf, fontInfo, cmds, hFills, bf.h_, bf.w_);

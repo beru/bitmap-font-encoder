@@ -145,8 +145,8 @@ void encodeCharacters(
 		uint16_t idx = idxs[i];
 		loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, bitmapData);
 		bmpFont.Compact();
-//		fputs(bmpFont.Dump().c_str(), of);
-//		fputs("\r\n", of);
+		fputs(bmpFont.Dump().c_str(), of);
+		fputs("\r\n", of);
 		size_t oldNBits = bitWriter.GetNBits();
 //TRACE("%d\r\n", bitWriter.GetNBits());
 
