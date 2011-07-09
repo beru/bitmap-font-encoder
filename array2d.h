@@ -18,7 +18,7 @@ public:
 	{
 		*this = arr;
 	}
-
+	
 	Array2D& operator = (const Array2D& a)
 	{
 		Resize(a.w_, a.h_);
@@ -30,7 +30,7 @@ public:
 	{
 		delete values_;
 	}
-
+	
 	void Resize(size_t w, size_t h)
 	{
 		if (values_) {
@@ -52,7 +52,7 @@ public:
 	
 	size_t GetWidth() const { return w_; }
 	size_t GetHeight() const { return h_; }
-
+	
 private:
 	size_t w_;
 	size_t h_;

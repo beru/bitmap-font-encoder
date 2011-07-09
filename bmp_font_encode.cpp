@@ -5,11 +5,6 @@
 #include "misc.h"
 #include "integer_coding.h"
 
-extern uint32_t g_dist[17][17][17];
-
-extern BitWriter bw2;
-extern BitWriter bw3;
-
 struct FillInfo
 {
 	uint8_t p1;
@@ -22,9 +17,19 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 	return lhs.p1 < rhs.p1;
 }
 
+extern uint32_t g_dist[17][17][17];
+
+void recLineEmptyFlag(BitWriter& bw, bool isNotEmpty)
+{
+++g_dist[7][0][isNotEmpty];
+	bw.Push(isNotEmpty);
+}
+
 static
 void buildVerticalCommands(
 	BitWriter& bw,
+	const BitmapFont& bf,
+	const BmpFontHeader& fontInfo,
 	std::vector<std::string>& cmds,
 	const std::vector<FillInfo>& fills,
 	uint8_t len1,
@@ -33,11 +38,8 @@ void buildVerticalCommands(
 {
 	if (fills.size() == 0) {
 		// 全部改行！
-		for (uint8_t i=0; i<len1; ++i) {
-			cmds.push_back("row 0");
-			bw.Push(false);
-++g_dist[ 8 ][ 1 ][ 0 ];
-bw2.Push(false);
+		for (uint8_t i=0; i<fontInfo.maxW; ++i) {
+			recLineEmptyFlag(bw, false);
 		}
 		return;
 	}
@@ -50,16 +52,14 @@ bw2.Push(false);
 		maxLen = std::max(maxLen, fi.len);
 		lineFlags |= 1 << fi.p1;
 	}
-	for (uint8_t i=0; i<len1; ++i) {
-		bool b = lineFlags & (1<<i);
-		bw.Push(b);
-++g_dist[ 8 ][ 1 ][ b ];
-bw2.Push(b);
-		if (b) {
-			cmds.push_back("row 1");
-		}else {
-			cmds.push_back("row 0");
-		}
+	for (uint8_t i=0; i<bf.x_; ++i) {
+		recLineEmptyFlag(bw, false);
+	}
+	for (uint8_t i=0; i<bf.w_; ++i) {
+		recLineEmptyFlag(bw, lineFlags & (1<<i));
+	}
+	for (uint8_t i=bf.x_+bf.w_; i<fontInfo.maxW; ++i) {
+		recLineEmptyFlag(bw, false);
 	}
 	// 最大線長の記録
 	char buff[32];
@@ -131,6 +131,8 @@ assert(fi.len-1 <= 15);
 static
 void buildHorizontalCommands(
 	BitWriter& bw,
+	const BitmapFont& bf,
+	const BmpFontHeader& fontInfo,
 	std::vector<std::string>& cmds,
 	const std::vector<FillInfo>& fills,
 	uint8_t len1,
@@ -139,11 +141,8 @@ void buildHorizontalCommands(
 {
 	if (fills.size() == 0) {
 		// 全部改行！
-		for (uint8_t i=0; i<len1; ++i) {
-			cmds.push_back("row 0");
-			bw.Push(false);
-bw3.Push(false);
-++g_dist[ 8 ][ 0 ][ 0 ];
+		for (uint8_t i=0; i<fontInfo.maxH; ++i) {
+			recLineEmptyFlag(bw, false);
 		}
 		return;
 	}
@@ -156,17 +155,16 @@ bw3.Push(false);
 		maxLen = std::max(maxLen, fi.len);
 		lineFlags |= 1 << fi.p1;
 	}
-	for (uint8_t i=0; i<len1; ++i) {
-		bool b = lineFlags & (1<<i);
-		bw.Push(b);
-bw3.Push(b);
-++g_dist[ 8 ][ 0 ][ b ];
-		if (b) {
-			cmds.push_back("row 1");
-		}else {
-			cmds.push_back("row 0");
-		}
+	for (uint8_t i=0; i<bf.y_; ++i) {
+		recLineEmptyFlag(bw, false);
 	}
+	for (uint8_t i=0; i<bf.h_; ++i) {
+		recLineEmptyFlag(bw, lineFlags & (1<<i));
+	}
+	for (uint8_t i=bf.y_+bf.h_; i<fontInfo.maxH; ++i) {
+		recLineEmptyFlag(bw, false);
+	}
+
 	// 最大線長の記録
 	assert(maxLen >= 2);
 	char buff[32];
@@ -174,7 +172,7 @@ bw3.Push(b);
 	cmds.push_back(buff);
 	integerEncode_CBT(bw, maxLen-2, len2-1);
 ++g_dist[ 6 ][ len2-1 ][ maxLen-2 ];
-	
+
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
@@ -533,41 +531,9 @@ std::string Encode(
 	sprintf(buff, "(%d %d %d %d)", bf.x_, bf.y_, bf.w_, bf.h_);
 	cmds.push_back(buff);
 	
-	uint8_t recX = bf.x_ - fontInfo.minX;
-	uint8_t recY = bf.y_ - fontInfo.minY;
-	uint8_t recW = fontInfo.maxW - (recX + bf.w_);
-	uint8_t recH = fontInfo.maxH - (recY + bf.h_);
-	// TODO: 0より1が圧倒的に多いので…。。ただ要適切に対処
-	recX = (recX == 0 ? 15 : recX-1);
-	integerEncode_Alpha(bw, recX);
-	integerEncode_Alpha(bw, recY);
-//	assert(bf.w_ != 0 && bf.h_ != 0);
-	integerEncode_Alpha(bw, recW);
-	integerEncode_Alpha(bw, recH);
-{
-	++g_dist[7][0][recX];
-	++g_dist[7][1][recY];
-	++g_dist[7][2][recW];
-	++g_dist[7][3][recH];
-}
-
-	// dist
-	{
 #if 1
-		for (size_t i=0; i<hFills.size(); ++i) {
-			const FillInfo& fi = hFills[i];
-			++g_dist[ 0 ][ bf.w_ - fi.p2 - 2 ][ fi.len - 2 ];
-		}
-		for (size_t i=0; i<vFills.size(); ++i) {
-			const FillInfo& fi = vFills[i];
-			++g_dist[ 1 ][ bf.h_ - fi.p2 - 1 ][ fi.len - 1 ];
-		}
-#endif
-	}
-
-#if 1
-	buildHorizontalCommands(bw, cmds, hFills, bf.h_, bf.w_);
-	buildVerticalCommands(bw, cmds, vFills, bf.w_, vlens);
+	buildHorizontalCommands(bw, bf, fontInfo, cmds, hFills, bf.h_, bf.w_);
+	buildVerticalCommands(bw, bf, fontInfo, cmds, vFills, bf.w_, vlens);
 #else
 	BitWriter bw2;
 	uint8_t buff2[128] = {0};

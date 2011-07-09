@@ -101,11 +101,6 @@ void chcTest()
 	}
 }
 
-BitWriter bw2;
-BitWriter bw3;
-uint8_t bw2buff[10240*3];
-uint8_t bw3buff[10240*3];
-
 void encodeCharacters(
 	const BDF::Header& header,
 	const std::vector<BDF::CharacterSegment>& segments,
@@ -117,9 +112,6 @@ void encodeCharacters(
 	const uint16_t* idxs
 	)
 {
-	bw2.Set(bw2buff);
-	bw3.Set(bw3buff);
-	
 	fprintf(of, "string length : %d\r\n", strLen);
 	const size_t hBytes = (header.FONTBOUNDINGBOX[0] + 7) / 8;
 	
@@ -164,9 +156,6 @@ void encodeCharacters(
 		;
 //			fprintf(of, "num of bits : %8d\r\n", bitWriter.GetNBits()-oldNBits);
 	}
-	int hoge = 0;
-
-
 }
 
 void decodeCharacters(const uint8_t* pData, size_t bytes, FILE* f)
