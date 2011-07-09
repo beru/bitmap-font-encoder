@@ -5,6 +5,11 @@
 #include "misc.h"
 #include "integer_coding.h"
 
+extern uint32_t g_dist[17][17][17];
+
+extern BitWriter bw2;
+extern BitWriter bw3;
+
 struct FillInfo
 {
 	uint8_t p1;
@@ -31,6 +36,8 @@ void buildVerticalCommands(
 		for (uint8_t i=0; i<len1; ++i) {
 			cmds.push_back("row 0");
 			bw.Push(false);
+++g_dist[ 8 ][ 1 ][ 0 ];
+bw2.Push(false);
 		}
 		return;
 	}
@@ -44,8 +51,11 @@ void buildVerticalCommands(
 		lineFlags |= 1 << fi.p1;
 	}
 	for (uint8_t i=0; i<len1; ++i) {
-		bw.Push(lineFlags & (1<<i));
-		if (lineFlags & (1<<i)) {
+		bool b = lineFlags & (1<<i);
+		bw.Push(b);
+++g_dist[ 8 ][ 1 ][ b ];
+bw2.Push(b);
+		if (b) {
 			cmds.push_back("row 1");
 		}else {
 			cmds.push_back("row 0");
@@ -63,10 +73,7 @@ void buildVerticalCommands(
 		}
 	}
 	integerEncode_CBT(bw, maxLen-1, maxLen2);
-{
-	extern uint16_t g_dist[17][17][17];
-	++g_dist[ 6 ][ maxLen2 ][ maxLen-1 ];
-}
+++g_dist[ 6 ][ maxLen2 ][ maxLen-1 ];
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
@@ -94,10 +101,7 @@ void buildVerticalCommands(
 				// offset == 0 do not record
 			}else {
 				integerEncode_CBT(bw, offset, len2-col);
-{
-	extern uint16_t g_dist[17][17][17];
-	++g_dist[ 4 ][ len2-col ][ offset ];
-}
+++g_dist[ 4 ][ len2-col ][ offset ];
 			}
 			assert(fi.len == 1);
 			// len == 1 do not record
@@ -106,12 +110,9 @@ void buildVerticalCommands(
 			integerEncode_CBT(bw, offset, len2-col);
 			uint8_t limit = std::min(maxLen, remain);
 			integerEncode_CBT(bw, fi.len-1, limit);
-{
-	extern uint16_t g_dist[17][17][17];
-	++g_dist[ 4 ][ len2-col ][ offset ];
-	assert(fi.len-1 <= 15);
-	++g_dist[ 5 ][ limit ][ fi.len - 1 ];
-}
+++g_dist[ 4 ][ len2-col ][ offset ];
+assert(fi.len-1 <= 15);
+++g_dist[ 5 ][ limit ][ fi.len - 1 ];
 		}
 
 		if (col == 0) {
@@ -141,6 +142,8 @@ void buildHorizontalCommands(
 		for (uint8_t i=0; i<len1; ++i) {
 			cmds.push_back("row 0");
 			bw.Push(false);
+bw3.Push(false);
+++g_dist[ 8 ][ 0 ][ 0 ];
 		}
 		return;
 	}
@@ -154,8 +157,11 @@ void buildHorizontalCommands(
 		lineFlags |= 1 << fi.p1;
 	}
 	for (uint8_t i=0; i<len1; ++i) {
-		bw.Push(lineFlags & (1<<i));
-		if (lineFlags & (1<<i)) {
+		bool b = lineFlags & (1<<i);
+		bw.Push(b);
+bw3.Push(b);
+++g_dist[ 8 ][ 0 ][ b ];
+		if (b) {
 			cmds.push_back("row 1");
 		}else {
 			cmds.push_back("row 0");
@@ -167,11 +173,8 @@ void buildHorizontalCommands(
 	sprintf(buff, "max line length : %d", maxLen);
 	cmds.push_back(buff);
 	integerEncode_CBT(bw, maxLen-2, len2-1);
-{
-	extern uint16_t g_dist[17][17][17];
-	++g_dist[ 6 ][ len2-1 ][ maxLen-2 ];
-}
-
+++g_dist[ 6 ][ len2-1 ][ maxLen-2 ];
+	
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
@@ -200,10 +203,7 @@ void buildHorizontalCommands(
 				// offset == 0 do not record
 			}else {
 				integerEncode_CBT(bw, offset, len2-1-col);
-{
-	extern uint16_t g_dist[17][17][17];
-	++g_dist[ 2 ][ len2-1-col ][ offset ];
-}
+++g_dist[ 2 ][ len2-1-col ][ offset ];
 			}
 			assert(fi.len == 2);
 			// len == 1 do not record
@@ -211,11 +211,8 @@ void buildHorizontalCommands(
 			assert(fi.len >= 2);
 			integerEncode_CBT(bw, offset, len2-1-col);
 			integerEncode_CBT(bw, fi.len-2, std::min(maxLen, remain)-1);
-{
-	extern uint16_t g_dist[17][17][17];
-	++g_dist[ 2 ][ len2-1-col ][ offset ];
-	++g_dist[ 3 ][ std::min(maxLen, remain)-1 ][ fi.len - 2 ];
-}
+++g_dist[ 2 ][ len2-1-col ][ offset ];
+++g_dist[ 3 ][ std::min(maxLen, remain)-1 ][ fi.len - 2 ];
 		}
 		
 		if (col == 0) {
@@ -548,7 +545,6 @@ std::string Encode(
 	integerEncode_Alpha(bw, recW);
 	integerEncode_Alpha(bw, recH);
 {
-	extern uint16_t g_dist[17][17][17];
 	++g_dist[7][0][recX];
 	++g_dist[7][1][recY];
 	++g_dist[7][2][recW];
@@ -557,17 +553,10 @@ std::string Encode(
 
 	// dist
 	{
-		extern uint16_t g_dist[17][17][17];
 #if 1
-//		static uint8_t s_lastP1 = -1;
-//		s_lastP1 = -1;
 		for (size_t i=0; i<hFills.size(); ++i) {
 			const FillInfo& fi = hFills[i];
-//			if (fi.p1 == s_lastP1) {
-//				continue;
-//			}
 			++g_dist[ 0 ][ bf.w_ - fi.p2 - 2 ][ fi.len - 2 ];
-//			s_lastP1 = fi.p1;
 		}
 		for (size_t i=0; i<vFills.size(); ++i) {
 			const FillInfo& fi = vFills[i];
