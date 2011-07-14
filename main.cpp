@@ -66,7 +66,7 @@ void chcTest()
 	size_t totalSize_Old = 0;
 	size_t totalSize_New = 0;
 	
-	for (uint8_t t=2; t<=7; ++t) {
+	for (uint8_t t=0; t<=7; ++t) {
 		for (uint8_t i=0; i<17; ++i) {
 			uint8_t entryLen = 0;
 			CHC_Entry entries[17] = {0};
@@ -150,10 +150,7 @@ void encodeCharacters(
 		size_t oldNBits = bitWriter.GetNBits();
 //TRACE("%d\r\n", bitWriter.GetNBits());
 
-//			fputs(
-			Encode(bitWriter, bmpFont, bmpFontHeader).c_str()
-//			, of)
-		;
+		Encode(bitWriter, bmpFont, bmpFontHeader);
 //			fprintf(of, "num of bits : %8d\r\n", bitWriter.GetNBits()-oldNBits);
 	}
 }

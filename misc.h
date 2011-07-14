@@ -128,6 +128,13 @@ uint8_t ntz(uint16_t n)
 	return countBits16((x&(-x))-1);
 }
 
+inline
+uint8_t ntz(uint32_t n)
+{
+	int x = n;
+	return countBits32((x&(-x))-1);
+}
+
 
 // http://www.hackersdelight.org/HDcode/flp2.c.txt
 /* Round down to a power of 2. */

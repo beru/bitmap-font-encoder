@@ -19,10 +19,35 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 
 extern uint32_t g_dist[17][17][17];
 
-void recLineEmptyFlag(BitWriter& bw, bool isNotEmpty)
+void recLineEmptyFlag(uint8_t type, BitWriter& bw, bool isNotEmpty)
 {
-++g_dist[8][0][isNotEmpty];
+	++g_dist[8][type][isNotEmpty];
 	bw.Push(isNotEmpty);
+}
+
+enum DataType {
+	DataType_Region = -100,
+	DataType_X_MaxLen = 0,
+	DataType_X_Offset,
+	DataType_X_Len,
+	DataType_Y_MaxLen,
+	DataType_Y_Offset,
+	DataType_Y_Len,
+};
+
+void encode_CBT(DataType type, BitWriter& bw, uint8_t n, uint8_t m)
+{
+	integerEncode_CBT(bw, n, m);
+	if (type < 0) {
+		return;
+	}
+	++g_dist[type][m][n];
+}
+
+void encode_Alpha(uint8_t type, BitWriter& bw, uint8_t n)
+{
+	integerEncode_Alpha(bw, n);
+	++g_dist[7][type][n];
 }
 
 static
@@ -30,83 +55,90 @@ void buildVerticalCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
 	const BmpFontHeader& fontInfo,
-	std::vector<std::string>& cmds,
-	const std::vector<FillInfo>& fills,
+	const std::vector<FillInfo>& vFills,
+	const std::vector<FillInfo>& hFills,
 	uint8_t len1,
 	const uint8_t* len2s
 	)
 {
-	if (fills.size() == 0) {
+	if (vFills.size() == 0) {
 		// 全部改行！
 		for (uint8_t i=0; i<fontInfo.maxW; ++i) {
-			recLineEmptyFlag(bw, false);
+			recLineEmptyFlag(1, bw, false);
 		}
 		return;
 	}
 	
-	// 空行かどうかの記録
-	uint16_t lineFlags = 0;
+	// 最大線長の記録
 	uint8_t maxLen = 1;
-	for (size_t i=0; i<fills.size(); ++i) {
-		const FillInfo& fi = fills[i];
-		maxLen = std::max(maxLen, fi.len);
-		lineFlags |= 1 << fi.p1;
-	}
-	for (uint8_t i=0; i<bf.w_; ++i) {
-		recLineEmptyFlag(bw, lineFlags & (1<<i));
+	uint8_t maxLen2 = 0;
+	{
+		// 空行かどうかの記録
+		uint32_t lineFlags = 0;
+		for (size_t i=0; i<vFills.size(); ++i) {
+			const FillInfo& fi = vFills[i];
+			maxLen = std::max(maxLen, fi.len);
+			lineFlags |= 1 << fi.p1;
+			maxLen2 = std::max(maxLen2, len2s[fi.p1]);
+		}
+
+		// 縦横開始位置と幅、高さを記録した場合、横面で左端の行や右端の行に記録が無かった場合に
+		// 縦面の記録で塗りつぶしが存在するのは確実なので、改行記録をその分省略できる。
+		uint8_t beginX = -1;
+		uint8_t endX = 0;
+		for (size_t i=0; i<hFills.size(); ++i) {
+			const FillInfo& fi = hFills[i];
+			beginX = std::min(beginX, fi.p2);
+			endX = std::max(endX, (uint8_t)(fi.p2+fi.len));
+		}
+		bool skipFirst = (beginX > 0);
+		bool skipLast = (endX < len1);
+		for (uint8_t i=0; i<bf.w_; ++i) {
+			if (i== 0 && skipFirst) {
+				continue;
+			}
+			if (i==bf.w_-1 && skipLast) {
+				continue;
+			}
+			recLineEmptyFlag(1, bw, lineFlags & (1<<i));
+//TRACE("%x", (lineFlags & (1<<i)) != 0);
+		}
+//TRACE("\r\n");
 	}
 	// 最大線長の記録
-	char buff[32];
-	sprintf(buff, "max line length : %d", maxLen);
-	cmds.push_back(buff);
-	uint8_t maxLen2 = 0;
-	// 縦面の場合の事も考えて最大線長を再度収集する
-	for (uint8_t i=0; i<len1; ++i) {
-		if (lineFlags & (1<<i)) {
-			maxLen2 = std::max(maxLen2, len2s[i]);
-		}
-	}
-	integerEncode_CBT(bw, maxLen-1, maxLen2);
-++g_dist[ 6 ][ maxLen2 ][ maxLen-1 ];
+	// TODO: データ有効行の一番初めの塗りつぶしの開始位置を記録すれば、範囲を狭められる。
+	encode_CBT(DataType_Y_MaxLen, bw, maxLen-1, maxLen2);
+	
 	uint8_t col = 0;
-	uint8_t row = fills[0].p1;
-	for (size_t i=0; i<fills.size(); ++i) {
-		const FillInfo& fi = fills[i];
+	uint8_t row = vFills[0].p1;
+	for (size_t i=0; i<vFills.size(); ++i) {
+		const FillInfo& fi = vFills[i];
 		if (row != fi.p1) {
 			if (col < len2s[row]) {
 				bw.Push(false);
-				cmds.push_back("next line");
 			}
 			col = 0;
+		}else {
+			if (col != 0) {
+				bw.Push(true); // fill sign
+			}
 		}
 		row = fi.p1;
 		uint8_t len2 = len2s[row];
-		char buff[32];
 		uint8_t offset = fi.p2 - col;
-		sprintf(buff, "fill %d %d", offset, fi.len);
-		cmds.push_back(buff);
-		
-		if (col != 0) {
-			bw.Push(true); // fill sign
-		}
 		uint8_t remain = len2 - fi.p2;
 		if (remain < 2) {
 			if (offset == 0) {
 				// offset == 0 do not record
 			}else {
-				integerEncode_CBT(bw, offset, len2-col);
-++g_dist[ 4 ][ len2-col ][ offset ];
+				encode_CBT(DataType_Y_Offset, bw, offset, len2-col);
 			}
 			assert(fi.len == 1);
 			// len == 1 do not record
 		}else {
 			assert(fi.len >= 1);
-			integerEncode_CBT(bw, offset, len2-col);
-			uint8_t limit = std::min(maxLen, remain);
-			integerEncode_CBT(bw, fi.len-1, limit);
-++g_dist[ 4 ][ len2-col ][ offset ];
-assert(fi.len-1 <= 15);
-++g_dist[ 5 ][ limit ][ fi.len - 1 ];
+			encode_CBT(DataType_Y_Offset, bw, offset, len2-col);
+			encode_CBT(DataType_Y_Len, bw, fi.len-1, std::min(maxLen, remain));
 		}
 
 		if (col == 0) {
@@ -118,8 +150,116 @@ assert(fi.len-1 <= 15);
 	}
 	if (col < len2s[row]) {
 		bw.Push(false);
-		cmds.push_back("next line");
 	}
+}
+
+static
+uint8_t findSlantingDotsToTheLeft(
+	const BitmapFont& bf,
+	uint8_t x, uint8_t y
+	)
+{
+	assert(x > 0 & x < bf.w_);
+	assert(y >= 0 && y < bf.h_ - 1);
+
+	size_t xRemain = x;
+	size_t yRemain = bf.h_ - y;
+
+	uint8_t repLen = 0;
+	for (size_t i=0; i<std::min(xRemain, yRemain); ++i) {
+		if (!bf.values_[y+i][x-i]) {
+			break;
+		}
+		++repLen;
+	}
+	
+	return repLen;
+}
+
+static
+uint8_t findSlantingDotsToTheRight(
+	const BitmapFont& bf,
+	uint8_t x, uint8_t y
+	)
+{
+	assert(x >= 0 & x < bf.w_-1);
+	assert(y >= 0 && y < bf.h_ - 1);
+
+	size_t xRemain = bf.w_ - 1 - x;
+	size_t yRemain = bf.h_ - y;
+
+	uint8_t repLen = 0;
+	for (size_t i=0; i<std::min(xRemain, yRemain); ++i) {
+		if (!bf.values_[y+i][x+i]) {
+			break;
+		}
+		++repLen;
+	}
+	
+	return repLen;
+}
+
+
+static
+void findDiagonalDots(
+	const BitmapFont& bf,
+	const BmpFontHeader& fontInfo
+	)
+{
+	if (bf.h_ < 2 | bf.w_ < 2) {
+		return;
+	}
+
+//	std::pair<uint8_t, uint8_t> pos;
+	std::vector<std::pair<uint8_t, uint8_t> > lefts, rights;
+	uint8_t repeatLen = 0;
+	
+	// 左下方向の線を左の列から右の列になぞって探す
+	for (uint8_t x=1; x<bf.w_; ++x) {
+		for (uint8_t i=0; i<std::min((uint8_t)(bf.h_-1), x); ++i) {
+			uint8_t x2 = x - i;
+			uint8_t y2 = i;
+			repeatLen = findSlantingDotsToTheLeft(bf, x2, y2);
+			if (repeatLen >= 3) {
+				lefts.push_back(std::make_pair(x2,y2));
+			}
+		}
+	}
+	// 右端に行ったので下に下がっていく。
+	for (uint8_t y=1; y<bf.h_-1; ++y) {
+		for (uint8_t i=0; i<std::min(bf.w_-1, bf.h_-1-y); ++i) {
+			uint8_t x2 = bf.w_-1 - i;
+			uint8_t y2 = y + i;
+			repeatLen = findSlantingDotsToTheLeft(bf, x2, y2);
+			if (repeatLen >= 3) {
+				lefts.push_back(std::make_pair(x2,y2));
+			}
+		}
+	}
+	
+	// 右下方向の線を右から左になぞって探す
+	for (uint8_t x=1; x<bf.w_; ++x) {
+		for (uint8_t i=0; i<std::min((uint8_t)(bf.h_-1), x); ++i) {
+			uint8_t x2 = bf.w_ - 1 - x;
+			uint8_t y2 = i;
+			repeatLen = findSlantingDotsToTheRight(bf, x2, y2);
+			if (repeatLen >= 3) {
+				rights.push_back(std::make_pair(x2,y2));
+			}
+		}
+	}
+	// 左端に行ったので下に下がっていく
+	for (uint8_t y=1; y<bf.h_-1; ++y) {
+		for (uint8_t i=0; i<std::min(bf.w_-1, bf.h_-1-y); ++i) {
+			uint8_t x2 = i;
+			uint8_t y2 = y + i;
+			repeatLen = findSlantingDotsToTheRight(bf, x2, y2);
+			if (repeatLen >= 3) {
+				rights.push_back(std::make_pair(x2,y2));
+			}
+		}
+	}
+	
 }
 
 static
@@ -127,7 +267,6 @@ void buildHorizontalCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
 	const BmpFontHeader& fontInfo,
-	std::vector<std::string>& cmds,
 	const std::vector<FillInfo>& fills,
 	uint8_t len1,
 	uint8_t len2
@@ -136,69 +275,64 @@ void buildHorizontalCommands(
 	if (fills.size() == 0) {
 		// 全部改行！
 		for (uint8_t i=0; i<fontInfo.maxH; ++i) {
-			recLineEmptyFlag(bw, false);
+			recLineEmptyFlag(0, bw, false);
 		}
 		return;
 	}
 	
+	uint8_t maxLen = 1; // 塗りつぶし最大長
 	// 空行かどうかの記録
-	uint16_t lineFlags = 0;
-	uint8_t maxLen = 1;
-	for (size_t i=0; i<fills.size(); ++i) {
-		const FillInfo& fi = fills[i];
-		maxLen = std::max(maxLen, fi.len);
-		lineFlags |= 1 << fi.p1;
-	}
-	for (uint8_t i=0; i<bf.h_; ++i) {
-		recLineEmptyFlag(bw, lineFlags & (1<<i));
+	{
+		uint16_t lineFlags = 0;
+		for (size_t i=0; i<fills.size(); ++i) {
+			const FillInfo& fi = fills[i];
+			maxLen = std::max(maxLen, fi.len);
+			lineFlags |= 1 << fi.p1;
+		}
+		for (uint8_t i=0; i<bf.h_; ++i) {
+			recLineEmptyFlag(0, bw, lineFlags & (1<<i));
+		}
 	}
 	
+	// TODO: データ有効行の一番初めの塗りつぶしの開始位置を先に記録すれば、範囲を狭められる。
 	// 最大線長の記録
 	assert(maxLen >= 2);
-	char buff[32];
-	sprintf(buff, "max line length : %d", maxLen);
-	cmds.push_back(buff);
-	integerEncode_CBT(bw, maxLen-2, len2-1);
-++g_dist[ 6 ][ len2-1 ][ maxLen-2 ];
-
+	encode_CBT(DataType_X_MaxLen, bw, maxLen-2, len2-1);
+	
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
 		const FillInfo& fi = fills[i];
 		if (row != fi.p1) {
-			if (col < len2-1) {
+			assert(row < fi.p1);
+			if (col <= len2-2) {
 				bw.Push(false);
-				cmds.push_back("next line");
 			}
 			col = 0;
+		}else {
+			assert(col <= fi.p2);
+			if (col != 0) {
+				bw.Push(true); // fill sign
+			}
 		}
+
 		row = fi.p1;
 		uint8_t offset = fi.p2 - col;
 		
-		char buff[32];
-		sprintf(buff, "fill %d %d", offset, fi.len);
-		cmds.push_back(buff);
-		
-		if (col != 0) {
-			bw.Push(true); // fill sign
-		}
 		assert(fi.p2 <= len2-2);
 		uint8_t remain = len2 - fi.p2;
 		if (remain <= 2) {
 			if (offset == 0) {
 				// offset == 0 do not record
 			}else {
-				integerEncode_CBT(bw, offset, len2-1-col);
-++g_dist[ 2 ][ len2-1-col ][ offset ];
+				encode_CBT(DataType_X_Offset, bw, offset, len2-1-col);
 			}
 			assert(fi.len == 2);
 			// len == 1 do not record
 		}else {
 			assert(fi.len >= 2);
-			integerEncode_CBT(bw, offset, len2-1-col);
-			integerEncode_CBT(bw, fi.len-2, std::min(maxLen, remain)-1);
-++g_dist[ 2 ][ len2-1-col ][ offset ];
-++g_dist[ 3 ][ std::min(maxLen, remain)-1 ][ fi.len - 2 ];
+			encode_CBT(DataType_X_Offset, bw, offset, len2-1-col);
+			encode_CBT(DataType_X_Len, bw, fi.len-2, std::min(maxLen, remain)-2+1);
 		}
 		
 		if (col == 0) {
@@ -208,9 +342,8 @@ void buildHorizontalCommands(
 		}
 		col += fi.len + 1;
 	}
-	if (col < len2) {
+	if (col <= len2-2) {
 		bw.Push(false);
-		cmds.push_back("next line");
 	}
 }
 
@@ -489,17 +622,17 @@ std::string EncodeHeader(
 		prevCode = code;
 	}
 	
-	integerEncode_CBT(bw, header.minX, 16);
-	integerEncode_CBT(bw, header.minY, 16);
-	integerEncode_CBT(bw, header.maxW-1, 16);
-	integerEncode_CBT(bw, header.maxH-1, 16);
+	encode_CBT(DataType_Region, bw, header.minX, 16);
+	encode_CBT(DataType_Region, bw, header.minY, 16);
+	encode_CBT(DataType_Region, bw, header.maxW-1, 16);
+	encode_CBT(DataType_Region, bw, header.maxH-1, 16);
 
 	char buff[64];
 	sprintf(buff, "%d %d %d %d\r\n", header.minX, header.minY, header.maxW, header.maxH);
 	return buff;
 }
 
-std::string Encode(
+void Encode(
 	BitWriter& bw,
 	const BitmapFont& bf,
 	const BmpFontHeader& fontInfo
@@ -509,7 +642,7 @@ std::string Encode(
 	std::vector<FillInfo> vFills;
 	
 	Array2D<uint8_t> values = bf.values_;
-	uint8_t vlens[16];
+	uint8_t vlens[32];
 	searchFills(values, hFills, vFills, vlens);
 	std::sort(hFills.begin(), hFills.end());
 	std::sort(vFills.begin(), vFills.end());
@@ -521,53 +654,20 @@ std::string Encode(
 	
 	uint8_t recX = bf.x_ - fontInfo.minX;
 	uint8_t recY = bf.y_ - fontInfo.minY;
-	uint8_t recW = fontInfo.maxW - (recX + bf.w_);
-	uint8_t recH = fontInfo.maxH - (recY + bf.h_);
+	uint8_t recW = fontInfo.maxW - (bf.x_ + bf.w_);
+	uint8_t recH = fontInfo.maxH - (bf.y_ + bf.h_);
 	// TODO: 0より1が圧倒的に多いので…。。ただ要適切に対処
 	recX = (recX == 0 ? 15 : recX-1);
-	integerEncode_Alpha(bw, recX);
-	integerEncode_Alpha(bw, recY);
+	encode_Alpha(0, bw, recX);
+	encode_Alpha(1, bw, recY);
 //	assert(bf.w_ != 0 && bf.h_ != 0);
-	integerEncode_Alpha(bw, recW);
-	integerEncode_Alpha(bw, recH);
-{
-	++g_dist[7][0][recX];
-	++g_dist[7][1][recY];
-	++g_dist[7][2][recW];
-	++g_dist[7][3][recH];
-}
+	encode_Alpha(2, bw, recW);
+	encode_Alpha(3, bw, recH);
 	
-#if 1
-	buildHorizontalCommands(bw, bf, fontInfo, cmds, hFills, bf.h_, bf.w_);
-	buildVerticalCommands(bw, bf, fontInfo, cmds, vFills, bf.w_, vlens);
-#else
-	BitWriter bw2;
-	uint8_t buff2[128] = {0};
-	bw2.Set(buff2);
+	findDiagonalDots(bf, fontInfo);
 
-	buildHorizontalCommands(bw2, cmds, hFills, bf.h_, bf.w_);
-	buildVerticalCommands(bw2, cmds, vFills, bf.w_, vlens);
+	buildHorizontalCommands(bw, bf, fontInfo, hFills, bf.h_, bf.w_);
+	buildVerticalCommands(bw, bf, fontInfo, vFills, hFills, bf.w_, vlens);
 	
-	if (bw2.GetNBits() < bf.w_*bf.h_) {
-		bw.Push(true);
-		buildHorizontalCommands(bw, cmds, hFills, bf.h_, bf.w_);
-		buildVerticalCommands(bw, cmds, vFills, bf.w_, vlens);
-	}else {
-		bw.Push(false);
-		for (uint8_t y=0; y<bf.h_; ++y) {
-			for (uint8_t x=0; x<bf.w_; ++x) {
-				bw.Push(bf.values_[y][x]);
-			}
-		}
-	}
-#endif
-	
-	std::string ret;
-	for (size_t i=0; i<cmds.size(); ++i) {
-		ret += cmds[i];
-		ret += "\r\n";
-	}
-	
-	return ret;
 }
 

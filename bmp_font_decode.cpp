@@ -15,7 +15,7 @@ void decodeHorizontalFills(
 	const uint8_t w = values.GetWidth();
 	
 	// decode line flags
-	uint16_t lineFlags = 0;
+	uint32_t lineFlags = 0;
 	for (uint8_t i=0; i<h; ++i) {
 		lineFlags |= br.Pop() << i;
 	}
@@ -78,7 +78,7 @@ void decodeVerticalFills(
 	const uint8_t w = values.GetWidth();
 	
 	// decode line flags
-	uint16_t lineFlags = 0;
+	uint32_t lineFlags = 0;
 	for (uint8_t i=0; i<w; ++i) {
 		lineFlags |= br.Pop() << i;
 	}
@@ -99,7 +99,7 @@ void decodeVerticalFills(
 		}
 	}
 	uint8_t maxLen = integerDecode_CBT(br, maxAvailHeight) + 1;
-	uint16_t fillFlags = 0;
+	uint32_t fillFlags = 0;
 	uint8_t row = 0;
 	uint8_t col = firstCol;
 	do {

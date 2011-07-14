@@ -80,7 +80,7 @@ uint16_t integerDecode_Delta(BitReader& br)
 
 void integerEncode_CBT(BitWriter& bw, uint8_t n, uint8_t m)
 {
-	assert(m >= 1 && m <= 16);
+	assert(m >= 1);
 	assert(n >= 0 && n < m);
 	if (m == 1) {
 		return;
@@ -102,7 +102,7 @@ void integerEncode_CBT(BitWriter& bw, uint8_t n, uint8_t m)
 
 uint8_t integerDecode_CBT(BitReader& br, uint8_t maxNum)
 {
-	assert(maxNum >= 1 && maxNum <= 16);
+	assert(maxNum >= 1);
 	if (maxNum == 1) {
 		return 0;
 	}
