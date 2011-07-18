@@ -6,17 +6,10 @@ template <typename T>
 class Array2D
 {
 public:
-	Array2D()
+	Array2D(T* mem)
 		:
-		values_(0)
+		values_(mem)
 	{
-	}
-	
-	Array2D(const Array2D& arr)
-		:
-		values_(0)
-	{
-		*this = arr;
 	}
 	
 	Array2D& operator = (const Array2D& a)
@@ -26,17 +19,8 @@ public:
 		return *this;
 	}
 	
-	~Array2D()
-	{
-		delete values_;
-	}
-	
 	void Resize(size_t w, size_t h)
 	{
-		if (values_) {
-			delete[] values_;
-		}
-		values_ = new T[w*h];
 		std::fill(values_, values_+w*h, T());
 		w_ = w;
 		h_ = h;

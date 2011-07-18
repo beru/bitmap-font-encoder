@@ -7,6 +7,12 @@
 class BitmapFont
 {
 public:
+	BitmapFont()
+		:
+		values_(buff_)
+	{
+	}
+
 	void Init(uint8_t w, uint8_t h);
 	void Next();
 	
@@ -16,6 +22,7 @@ public:
 	void Compact();
 	
 	Array2D<uint8_t> values_;
+	uint8_t buff_[32*32];
 	uint8_t x_;
 	uint8_t y_;
 	uint8_t w_;

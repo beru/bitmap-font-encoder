@@ -12,6 +12,19 @@ struct FillInfo
 	uint8_t len;
 };
 
+struct SlantingFillInfo
+{
+	uint8_t x;
+	uint8_t y;
+	enum Direction {
+		Direction_Left,
+		Direction_Right,
+	} dir;
+};
+
+#define PIXEL_X 2
+#define PIXEL_Y 4
+
 bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 {
 	return lhs.p1 < rhs.p1;
@@ -153,21 +166,49 @@ void buildVerticalCommands(
 	}
 }
 
+// 上下に連続していない単独Yピクセルかどうか
 static
-uint8_t findSlantingDotsToTheLeft(
-	const BitmapFont& bf,
+bool isSingleYPixel(
+	const Array2D<uint8_t>& values,
 	uint8_t x, uint8_t y
 	)
 {
-	assert(x > 0 & x < bf.w_);
-	assert(y >= 0 && y < bf.h_ - 1);
+	if (values[y][x] != PIXEL_Y) {
+		return false;
+	}
+	const uint8_t w = values.GetWidth();
+	const uint8_t h = values.GetHeight();
+	if (y != 0) {
+		if (values[y-1][x]) {
+			return false;
+		}
+	}
+	if (y != h-1) {
+		if (values[y+1][x]) {
+			return false;
+		}
+	}
+	return true;
+}
 
-	size_t xRemain = x;
-	size_t yRemain = bf.h_ - y;
+static
+uint8_t findSlantingDotsToTheLeft(
+	const Array2D<uint8_t>& values,
+	uint8_t x, uint8_t y
+	)
+{
+	const uint8_t w = values.GetWidth();
+	const uint8_t h = values.GetHeight();
+	
+	assert(x > 0 & x < w);
+	assert(y >= 0 && y < h - 1);
+	
+	size_t xRemain = x + 1;
+	size_t yRemain = h - y;
 
 	uint8_t repLen = 0;
 	for (size_t i=0; i<std::min(xRemain, yRemain); ++i) {
-		if (!bf.values_[y+i][x-i]) {
+		if (!isSingleYPixel(values, x-i, y+i)) {
 			break;
 		}
 		++repLen;
@@ -178,19 +219,22 @@ uint8_t findSlantingDotsToTheLeft(
 
 static
 uint8_t findSlantingDotsToTheRight(
-	const BitmapFont& bf,
+	const Array2D<uint8_t>& values,
 	uint8_t x, uint8_t y
 	)
 {
-	assert(x >= 0 & x < bf.w_-1);
-	assert(y >= 0 && y < bf.h_ - 1);
-
-	size_t xRemain = bf.w_ - 1 - x;
-	size_t yRemain = bf.h_ - y;
-
+	const uint8_t w = values.GetWidth();
+	const uint8_t h = values.GetHeight();
+	
+	assert(x >= 0 & x < w - 1);
+	assert(y >= 0 && y < h - 1);
+	
+	size_t xRemain = w - x;
+	size_t yRemain = h - y;
+	
 	uint8_t repLen = 0;
 	for (size_t i=0; i<std::min(xRemain, yRemain); ++i) {
-		if (!bf.values_[y+i][x+i]) {
+		if (!isSingleYPixel(values, x+i, y+i)) {
 			break;
 		}
 		++repLen;
@@ -200,66 +244,114 @@ uint8_t findSlantingDotsToTheRight(
 }
 
 
+struct SlantingDotsInfo
+{
+	enum Direction {
+		Direction_ToTheLeft,
+		Direction_ToTheRight,
+	} dir;
+	uint8_t x;
+	uint8_t y;
+	uint8_t len;
+};
+
 static
-void findDiagonalDots(
-	const BitmapFont& bf,
+void findSlangtingDots(
+	const Array2D<uint8_t>& values,
 	const BmpFontHeader& fontInfo
 	)
 {
-	if (bf.h_ < 2 | bf.w_ < 2) {
+	const uint8_t w = values.GetWidth();
+	const uint8_t h = values.GetHeight();
+
+	if (h < 2 | w < 2) {
 		return;
 	}
 
 //	std::pair<uint8_t, uint8_t> pos;
-	std::vector<std::pair<uint8_t, uint8_t> > lefts, rights;
+	std::vector<SlantingDotsInfo> repeats;
 	uint8_t repeatLen = 0;
 	
 	// 左下方向の線を左の列から右の列になぞって探す
-	for (uint8_t x=1; x<bf.w_; ++x) {
-		for (uint8_t i=0; i<std::min((uint8_t)(bf.h_-1), x); ++i) {
+	for (uint8_t x=1; x<w; ++x) {
+		for (uint8_t i=0; i<std::min((uint8_t)(h-1), x); ++i) {
 			uint8_t x2 = x - i;
 			uint8_t y2 = i;
-			repeatLen = findSlantingDotsToTheLeft(bf, x2, y2);
+			repeatLen = findSlantingDotsToTheLeft(values, x2, y2);
 			if (repeatLen >= 3) {
-				lefts.push_back(std::make_pair(x2,y2));
+				SlantingDotsInfo info;
+				info.dir = SlantingDotsInfo::Direction_ToTheLeft;
+				info.x = x2;
+				info.y = y2;
+				info.len = repeatLen;
+				repeats.push_back(info);
 			}
+			i+=repeatLen;
 		}
 	}
 	// 右端に行ったので下に下がっていく。
-	for (uint8_t y=1; y<bf.h_-1; ++y) {
-		for (uint8_t i=0; i<std::min(bf.w_-1, bf.h_-1-y); ++i) {
-			uint8_t x2 = bf.w_-1 - i;
+	for (uint8_t y=1; y<h-1; ++y) {
+		for (uint8_t i=0; i<std::min(w-1, h-1-y); ++i) {
+			uint8_t x2 = w-1 - i;
 			uint8_t y2 = y + i;
-			repeatLen = findSlantingDotsToTheLeft(bf, x2, y2);
+			repeatLen = findSlantingDotsToTheLeft(values, x2, y2);
 			if (repeatLen >= 3) {
-				lefts.push_back(std::make_pair(x2,y2));
+				SlantingDotsInfo info;
+				info.dir = SlantingDotsInfo::Direction_ToTheLeft;
+				info.x = x2;
+				info.y = y2;
+				info.len = repeatLen;
+				repeats.push_back(info);
 			}
+			i+=repeatLen;
 		}
 	}
 	
 	// 右下方向の線を右から左になぞって探す
-	for (uint8_t x=1; x<bf.w_; ++x) {
-		for (uint8_t i=0; i<std::min((uint8_t)(bf.h_-1), x); ++i) {
-			uint8_t x2 = bf.w_ - 1 - x;
+	for (uint8_t x=1; x<w; ++x) {
+		for (uint8_t i=0; i<std::min((uint8_t)(h-1), x); ++i) {
+			uint8_t x2 = w - 1 - x + i;
 			uint8_t y2 = i;
-			repeatLen = findSlantingDotsToTheRight(bf, x2, y2);
+			repeatLen = findSlantingDotsToTheRight(values, x2, y2);
 			if (repeatLen >= 3) {
-				rights.push_back(std::make_pair(x2,y2));
+				SlantingDotsInfo info;
+				info.dir = SlantingDotsInfo::Direction_ToTheRight;
+				info.x = x2;
+				info.y = y2;
+				info.len = repeatLen;
+				repeats.push_back(info);
 			}
+			i+=repeatLen;
 		}
 	}
 	// 左端に行ったので下に下がっていく
-	for (uint8_t y=1; y<bf.h_-1; ++y) {
-		for (uint8_t i=0; i<std::min(bf.w_-1, bf.h_-1-y); ++i) {
+	for (uint8_t y=1; y<h-1; ++y) {
+		for (uint8_t i=0; i<std::min(w-1, h-1-y); ++i) {
 			uint8_t x2 = i;
 			uint8_t y2 = y + i;
-			repeatLen = findSlantingDotsToTheRight(bf, x2, y2);
+			repeatLen = findSlantingDotsToTheRight(values, x2, y2);
 			if (repeatLen >= 3) {
-				rights.push_back(std::make_pair(x2,y2));
+				SlantingDotsInfo info;
+				info.dir = SlantingDotsInfo::Direction_ToTheRight;
+				info.x = x2;
+				info.y = y2;
+				info.len = repeatLen;
+				repeats.push_back(info);
 			}
+			i+=repeatLen;
 		}
 	}
 	
+}
+
+static
+void buildSlantingCommands(
+	BitWriter& bw,
+	const BitmapFont& bf,
+	const BmpFontHeader& fontInfo,
+	std::vector<SlantingFillInfo>& sFills
+	)
+{
 }
 
 static
@@ -267,9 +359,7 @@ void buildHorizontalCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
 	const BmpFontHeader& fontInfo,
-	const std::vector<FillInfo>& fills,
-	uint8_t len1,
-	uint8_t len2
+	const std::vector<FillInfo>& fills
 	)
 {
 	if (fills.size() == 0) {
@@ -297,7 +387,7 @@ void buildHorizontalCommands(
 	// TODO: データ有効行の一番初めの塗りつぶしの開始位置を先に記録すれば、範囲を狭められる。
 	// 最大線長の記録
 	assert(maxLen >= 2);
-	encode_CBT(DataType_X_MaxLen, bw, maxLen-2, len2-1);
+	encode_CBT(DataType_X_MaxLen, bw, maxLen-2, bf.w_-1);
 	
 	uint8_t col = 0;
 	uint8_t row = fills[0].p1;
@@ -305,7 +395,7 @@ void buildHorizontalCommands(
 		const FillInfo& fi = fills[i];
 		if (row != fi.p1) {
 			assert(row < fi.p1);
-			if (col <= len2-2) {
+			if (col <= bf.w_-2) {
 				bw.Push(false);
 			}
 			col = 0;
@@ -319,19 +409,19 @@ void buildHorizontalCommands(
 		row = fi.p1;
 		uint8_t offset = fi.p2 - col;
 		
-		assert(fi.p2 <= len2-2);
-		uint8_t remain = len2 - fi.p2;
+		assert(fi.p2 <= bf.w_-2);
+		uint8_t remain = bf.w_ - fi.p2;
 		if (remain <= 2) {
 			if (offset == 0) {
 				// offset == 0 do not record
 			}else {
-				encode_CBT(DataType_X_Offset, bw, offset, len2-1-col);
+				encode_CBT(DataType_X_Offset, bw, offset, bf.w_-1-col);
 			}
 			assert(fi.len == 2);
 			// len == 1 do not record
 		}else {
 			assert(fi.len >= 2);
-			encode_CBT(DataType_X_Offset, bw, offset, len2-1-col);
+			encode_CBT(DataType_X_Offset, bw, offset, bf.w_-1-col);
 			encode_CBT(DataType_X_Len, bw, fi.len-2, std::min(maxLen, remain)-2+1);
 		}
 		
@@ -342,7 +432,7 @@ void buildHorizontalCommands(
 		}
 		col += fi.len + 1;
 	}
-	if (col <= len2-2) {
+	if (col <= bf.w_-2) {
 		bw.Push(false);
 	}
 }
@@ -360,9 +450,6 @@ bool isOverlappingWithFill(const std::vector<FillInfo>& fills, uint8_t p1, uint8
 	}
 	return false;
 }
-
-#define PIXEL_X 2
-#define PIXEL_Y 4
 
 bool isLineFullfilled(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t w)
 {
@@ -416,18 +503,15 @@ uint8_t findYRepeatLength(const Array2D<uint8_t>& values, uint8_t x, uint8_t y)
 	return len;
 }
 
-void searchFills(
+void searchHorizontalFills(
 	Array2D<uint8_t>& values,
-	std::vector<FillInfo>& hFills,
-	std::vector<FillInfo>& vFills,
-	uint8_t* vlens
+	std::vector<FillInfo>& hFills
 	)
 {
-	hFills.clear();
-	vFills.clear();
-	
 	const uint8_t w = values.GetWidth();
 	const uint8_t h = values.GetHeight();
+	
+	hFills.clear();
 	
 	// 横方向の線の完全塗りつぶしを最初に調査
 	if (w > 1) {
@@ -555,6 +639,19 @@ void searchFills(
 		}
 	}
 #endif
+
+}
+
+void searchVerticalFills(
+	Array2D<uint8_t>& values,
+	std::vector<FillInfo>& vFills,
+	uint8_t* vlens
+	)
+{
+	const uint8_t w = values.GetWidth();
+	const uint8_t h = values.GetHeight();
+	
+	vFills.clear();
 	
 	// 縦方向の塗りつぶし
 	for (uint8_t x=0; x<w; ++x) {
@@ -589,6 +686,81 @@ void searchFills(
 				y = ey;
 			}
 		}
+	}
+}
+
+uint8_t vFillYtoOrgY(const Array2D<uint8_t>& values, uint8_t x, uint8_t vy)
+{
+	// vFill y to original Y
+	uint8_t cnt = 0;
+	uint8_t y;
+	const uint8_t h = values.GetHeight();
+	for (y=0; y<h; ++y) {
+		uint8_t v = values[y][x];
+		if (v == PIXEL_X) {
+			continue;
+		}
+		++cnt;
+		if (cnt == vy) {
+			break;
+		}
+	}
+	return y;
+}
+
+void searchFills(
+	Array2D<uint8_t>& values,
+	std::vector<FillInfo>& hFills,
+	std::vector<FillInfo>& vFills,
+	std::vector<SlantingFillInfo>& sFills,
+	uint8_t* vlens
+	)
+{
+	searchHorizontalFills(values, hFills);
+	searchVerticalFills(values, vFills, vlens);
+	
+	sFills.clear();
+	
+	const uint8_t w = values.GetWidth();
+	const uint8_t h = values.GetHeight();
+	
+	// 2ドット以上の斜め線が対象
+	
+	// 左方向の線を右端から調べる
+	for (size_t i=0; i<vFills.size(); ++i) {
+		const FillInfo& fi = vFills[vFills.size()-1-i];
+		uint8_t x = fi.p1;
+		uint8_t y = vFillYtoOrgY(values, x, fi.p2 + fi.len);
+		// 末尾が後半2行の場合は、2ドット以上の斜め線を引けないので対象外とする。
+		if (y >= h-2) {
+			continue;
+		}
+		uint8_t nRepeats;
+		if (fi.p1 > 1) {
+			nRepeats = findSlantingDotsToTheLeft(values, x-1, y+1);
+			if (nRepeats >= 2) {
+				uint8_t hoge = 0;
+			}
+		}
+		
+	}
+
+	for (size_t i=0; i<vFills.size(); ++i) {
+		const FillInfo& fi = vFills[i];
+		uint8_t x = fi.p1;
+		uint8_t y = vFillYtoOrgY(values, x, fi.p2 + fi.len);
+		// 末尾が後半2行の場合は、2ドット以上の斜め線を引けないので対象外とする。
+		if (y >= h-2) {
+			continue;
+		}
+		uint8_t nRepeats;
+		if (fi.p1 < w-2) {
+			nRepeats = findSlantingDotsToTheRight(values, x+1, y+1);
+			if (nRepeats >= 2) {
+				uint8_t hoge = 0;
+			}
+		}
+		int hoge = 0;
 	}
 	
 }
@@ -640,10 +812,11 @@ void Encode(
 {
 	std::vector<FillInfo> hFills;
 	std::vector<FillInfo> vFills;
+	std::vector<SlantingFillInfo> sFills;
 	
 	Array2D<uint8_t> values = bf.values_;
-	uint8_t vlens[32];
-	searchFills(values, hFills, vFills, vlens);
+	uint8_t vlens[32]; // 縦記録の領域の高さ、横記録分高さが限定される
+	searchFills(values, hFills, vFills, sFills, vlens);
 	std::sort(hFills.begin(), hFills.end());
 	std::sort(vFills.begin(), vFills.end());
 	
@@ -664,10 +837,10 @@ void Encode(
 	encode_Alpha(2, bw, recW);
 	encode_Alpha(3, bw, recH);
 	
-	findDiagonalDots(bf, fontInfo);
-
-	buildHorizontalCommands(bw, bf, fontInfo, hFills, bf.h_, bf.w_);
+	buildHorizontalCommands(bw, bf, fontInfo, hFills);
 	buildVerticalCommands(bw, bf, fontInfo, vFills, hFills, bf.w_, vlens);
-	
+	buildSlantingCommands(bw, bf, fontInfo, sFills);
+
+
 }
 
