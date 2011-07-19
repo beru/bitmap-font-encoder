@@ -5,6 +5,10 @@
 #include "misc.h"
 #include "integer_coding.h"
 
+extern uint32_t g_dist[17][17][17];
+
+namespace {
+
 struct FillInfo
 {
 	uint8_t p1;
@@ -24,13 +28,12 @@ struct SlantingFillInfo
 
 #define PIXEL_X 2
 #define PIXEL_Y 4
+#define PIXEL_UNDELETABLE 8
 
 bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 {
 	return lhs.p1 < rhs.p1;
 }
-
-extern uint32_t g_dist[17][17][17];
 
 void recLineEmptyFlag(uint8_t type, BitWriter& bw, bool isNotEmpty)
 {
@@ -63,7 +66,6 @@ void encode_Alpha(uint8_t type, BitWriter& bw, uint8_t n)
 	++g_dist[7][type][n];
 }
 
-static
 void buildVerticalCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
@@ -166,195 +168,6 @@ void buildVerticalCommands(
 	}
 }
 
-// 上下に連続していない単独Yピクセルかどうか
-static
-bool isSingleYPixel(
-	const Array2D<uint8_t>& values,
-	uint8_t x, uint8_t y
-	)
-{
-	if (values[y][x] != PIXEL_Y) {
-		return false;
-	}
-	const uint8_t w = values.GetWidth();
-	const uint8_t h = values.GetHeight();
-	if (y != 0) {
-		if (values[y-1][x]) {
-			return false;
-		}
-	}
-	if (y != h-1) {
-		if (values[y+1][x]) {
-			return false;
-		}
-	}
-	return true;
-}
-
-static
-uint8_t findSlantingDotsToTheLeft(
-	const Array2D<uint8_t>& values,
-	uint8_t x, uint8_t y
-	)
-{
-	const uint8_t w = values.GetWidth();
-	const uint8_t h = values.GetHeight();
-	
-	assert(x > 0 & x < w);
-	assert(y >= 0 && y < h - 1);
-	
-	size_t xRemain = x + 1;
-	size_t yRemain = h - y;
-
-	uint8_t repLen = 0;
-	for (size_t i=0; i<std::min(xRemain, yRemain); ++i) {
-		if (!isSingleYPixel(values, x-i, y+i)) {
-			break;
-		}
-		++repLen;
-	}
-	
-	return repLen;
-}
-
-static
-uint8_t findSlantingDotsToTheRight(
-	const Array2D<uint8_t>& values,
-	uint8_t x, uint8_t y
-	)
-{
-	const uint8_t w = values.GetWidth();
-	const uint8_t h = values.GetHeight();
-	
-	assert(x >= 0 & x < w - 1);
-	assert(y >= 0 && y < h - 1);
-	
-	size_t xRemain = w - x;
-	size_t yRemain = h - y;
-	
-	uint8_t repLen = 0;
-	for (size_t i=0; i<std::min(xRemain, yRemain); ++i) {
-		if (!isSingleYPixel(values, x+i, y+i)) {
-			break;
-		}
-		++repLen;
-	}
-	
-	return repLen;
-}
-
-
-struct SlantingDotsInfo
-{
-	enum Direction {
-		Direction_ToTheLeft,
-		Direction_ToTheRight,
-	} dir;
-	uint8_t x;
-	uint8_t y;
-	uint8_t len;
-};
-
-static
-void findSlangtingDots(
-	const Array2D<uint8_t>& values,
-	const BmpFontHeader& fontInfo
-	)
-{
-	const uint8_t w = values.GetWidth();
-	const uint8_t h = values.GetHeight();
-
-	if (h < 2 | w < 2) {
-		return;
-	}
-
-//	std::pair<uint8_t, uint8_t> pos;
-	std::vector<SlantingDotsInfo> repeats;
-	uint8_t repeatLen = 0;
-	
-	// 左下方向の線を左の列から右の列になぞって探す
-	for (uint8_t x=1; x<w; ++x) {
-		for (uint8_t i=0; i<std::min((uint8_t)(h-1), x); ++i) {
-			uint8_t x2 = x - i;
-			uint8_t y2 = i;
-			repeatLen = findSlantingDotsToTheLeft(values, x2, y2);
-			if (repeatLen >= 3) {
-				SlantingDotsInfo info;
-				info.dir = SlantingDotsInfo::Direction_ToTheLeft;
-				info.x = x2;
-				info.y = y2;
-				info.len = repeatLen;
-				repeats.push_back(info);
-			}
-			i+=repeatLen;
-		}
-	}
-	// 右端に行ったので下に下がっていく。
-	for (uint8_t y=1; y<h-1; ++y) {
-		for (uint8_t i=0; i<std::min(w-1, h-1-y); ++i) {
-			uint8_t x2 = w-1 - i;
-			uint8_t y2 = y + i;
-			repeatLen = findSlantingDotsToTheLeft(values, x2, y2);
-			if (repeatLen >= 3) {
-				SlantingDotsInfo info;
-				info.dir = SlantingDotsInfo::Direction_ToTheLeft;
-				info.x = x2;
-				info.y = y2;
-				info.len = repeatLen;
-				repeats.push_back(info);
-			}
-			i+=repeatLen;
-		}
-	}
-	
-	// 右下方向の線を右から左になぞって探す
-	for (uint8_t x=1; x<w; ++x) {
-		for (uint8_t i=0; i<std::min((uint8_t)(h-1), x); ++i) {
-			uint8_t x2 = w - 1 - x + i;
-			uint8_t y2 = i;
-			repeatLen = findSlantingDotsToTheRight(values, x2, y2);
-			if (repeatLen >= 3) {
-				SlantingDotsInfo info;
-				info.dir = SlantingDotsInfo::Direction_ToTheRight;
-				info.x = x2;
-				info.y = y2;
-				info.len = repeatLen;
-				repeats.push_back(info);
-			}
-			i+=repeatLen;
-		}
-	}
-	// 左端に行ったので下に下がっていく
-	for (uint8_t y=1; y<h-1; ++y) {
-		for (uint8_t i=0; i<std::min(w-1, h-1-y); ++i) {
-			uint8_t x2 = i;
-			uint8_t y2 = y + i;
-			repeatLen = findSlantingDotsToTheRight(values, x2, y2);
-			if (repeatLen >= 3) {
-				SlantingDotsInfo info;
-				info.dir = SlantingDotsInfo::Direction_ToTheRight;
-				info.x = x2;
-				info.y = y2;
-				info.len = repeatLen;
-				repeats.push_back(info);
-			}
-			i+=repeatLen;
-		}
-	}
-	
-}
-
-static
-void buildSlantingCommands(
-	BitWriter& bw,
-	const BitmapFont& bf,
-	const BmpFontHeader& fontInfo,
-	std::vector<SlantingFillInfo>& sFills
-	)
-{
-}
-
-static
 void buildHorizontalCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
@@ -437,18 +250,37 @@ void buildHorizontalCommands(
 	}
 }
 
-bool isOverlappingWithFill(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t p2)
+// 上下に連続していない単独Yピクセルかどうか
+bool isSingleYPixel(
+	const Array2D<uint8_t>& values,
+	uint8_t x, uint8_t y
+	)
 {
-	for (size_t i=0; i<fills.size(); ++i) {
-		const FillInfo& vfi = fills[i];
-		if (vfi.p1 != p1) {
-			continue;
-		}
-		if (vfi.p2 <= p2 && p2 < vfi.p2+vfi.len) {
-			return true;
+	if (values[y][x] != PIXEL_Y) {
+		return false;
+	}
+	const uint8_t w = values.GetWidth();
+	const uint8_t h = values.GetHeight();
+	if (y != 0) {
+		if (values[y-1][x] & PIXEL_Y) {
+			return false;
 		}
 	}
-	return false;
+	if (y != h-1) {
+		if (values[y+1][x] & PIXEL_Y) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void buildSlantingCommands(
+	BitWriter& bw,
+	const BitmapFont& bf,
+	const BmpFontHeader& fontInfo,
+	std::vector<SlantingFillInfo>& sFills
+	)
+{
 }
 
 bool isLineFullfilled(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t w)
@@ -700,10 +532,10 @@ uint8_t vFillYtoOrgY(const Array2D<uint8_t>& values, uint8_t x, uint8_t vy)
 		if (v == PIXEL_X) {
 			continue;
 		}
-		++cnt;
 		if (cnt == vy) {
 			break;
 		}
+		++cnt;
 	}
 	return y;
 }
@@ -719,49 +551,166 @@ void searchFills(
 	searchHorizontalFills(values, hFills);
 	searchVerticalFills(values, vFills, vlens);
 	
+	// 斜め線探索処理
 	sFills.clear();
-	
 	const uint8_t w = values.GetWidth();
 	const uint8_t h = values.GetHeight();
 	
-	// 2ドット以上の斜め線が対象
-	
-	// 左方向の線を右端から調べる
+	// 斜め線で引けるので削るドットリスト
+	std::vector<std::pair<uint8_t, uint8_t> > deleteList;
+
+	// 左下方向に進む線を右端から調べる
 	for (size_t i=0; i<vFills.size(); ++i) {
 		const FillInfo& fi = vFills[vFills.size()-1-i];
 		uint8_t x = fi.p1;
-		uint8_t y = vFillYtoOrgY(values, x, fi.p2 + fi.len);
-		// 末尾が後半2行の場合は、2ドット以上の斜め線を引けないので対象外とする。
+		uint8_t y = vFillYtoOrgY(values, x, fi.p2 + fi.len - 1);
+		// 末尾が後半2行の場合は、2ドット以上の斜め線を引けないので開始点の対象外とする。
 		if (y >= h-2) {
 			continue;
 		}
-		uint8_t nRepeats;
-		if (fi.p1 > 1) {
-			nRepeats = findSlantingDotsToTheLeft(values, x-1, y+1);
-			if (nRepeats >= 2) {
-				uint8_t hoge = 0;
+		if (fi.p1 <= 1) {
+			continue;
+		}
+		// 斜め線の中間ドットは開始点になれない
+		if (std::find(deleteList.begin(), deleteList.end(), std::make_pair(x, y)) != deleteList.end()) {
+			continue;
+		}
+		size_t xRemain = x;
+		size_t yRemain = h - y + 1;
+		uint8_t repLen = 0;
+		for (size_t j=0; j<std::min(xRemain, yRemain); ++j) {
+			uint8_t x2 = x - 1 - j;
+			uint8_t y2 = y + 1 + j;
+			if (!isSingleYPixel(values, x2, y2)) {
+				break;
+			}
+			if (values[y2][x2] & PIXEL_UNDELETABLE) {
+				break;
+			}
+			++repLen;
+		}
+		if (repLen == 0) {
+			continue;
+		}else if (repLen == 1) {
+			// 1ドットしか伸びてなくてしかも単独1ドットが端でない位置にある場合、削れない
+			if (isSingleYPixel(values, x-1, y+1) && x-1 != 0 && y+1 != h-1) {
+				continue;
 			}
 		}
-		
+		// 斜め線の始点が単独１ドットの場合は、非削除対象にする
+		if (isSingleYPixel(values, x, y)) {
+			values[y][x] |= PIXEL_UNDELETABLE;
+		}
+		// 斜め線の終点が単独1ドットの場合は、非削除対象にする
+		int8_t x2 = x - repLen - 1;
+		int8_t y2 = y + repLen + 1;
+		if (x2 > 0 && y2 < h-1) {
+			if (isSingleYPixel(values, x2, y2)) {
+				values[y2][x2] |= PIXEL_UNDELETABLE;
+			}
+		}
+		for (size_t j=0; j<repLen; ++j) {
+			uint8_t x2 = x - 1 - j;
+			uint8_t y2 = y + 1 + j;
+			if (values[y2][x2] & PIXEL_UNDELETABLE) {
+				break;
+			}
+			// 斜め線で描画出来る単独1ドットは、削除対象
+			deleteList.push_back(std::make_pair(x2, y2));
+		}
+
+		SlantingFillInfo sf;
+		sf.x = x;
+		sf.y = y;
+		sf.dir = SlantingFillInfo::Direction_Left;
+		sFills.push_back(sf);
 	}
 
+	// 右下方向に進む線を左端から調べる
 	for (size_t i=0; i<vFills.size(); ++i) {
 		const FillInfo& fi = vFills[i];
 		uint8_t x = fi.p1;
-		uint8_t y = vFillYtoOrgY(values, x, fi.p2 + fi.len);
-		// 末尾が後半2行の場合は、2ドット以上の斜め線を引けないので対象外とする。
+		uint8_t y = vFillYtoOrgY(values, x, fi.p2 + fi.len - 1);
+		// 末尾が後半2行の場合は、2ドット以上の斜め線を引けないので開始点の対象外とする。
 		if (y >= h-2) {
 			continue;
 		}
-		uint8_t nRepeats;
-		if (fi.p1 < w-2) {
-			nRepeats = findSlantingDotsToTheRight(values, x+1, y+1);
-			if (nRepeats >= 2) {
-				uint8_t hoge = 0;
+		if (fi.p1 >= w-2) {
+			continue;
+		}
+		// 斜め線の中間ドットは開始点になれない
+		if (std::find(deleteList.begin(), deleteList.end(), std::make_pair(x, y)) != deleteList.end()) {
+			continue;
+		}
+		size_t xRemain = w - (x + 1);
+		size_t yRemain = h - (y + 1);
+		uint8_t repLen = 0;
+		for (size_t j=0; j<std::min(xRemain, yRemain); ++j) {
+			uint8_t x2 = x + 1 + j;
+			uint8_t y2 = y + 1 + j;
+			if (!isSingleYPixel(values, x2, y2)) {
+				break;
+			}
+			if (values[y2][x2] & PIXEL_UNDELETABLE) {
+				break;
+			}
+			++repLen;
+		}
+		if (repLen == 0) {
+			continue;
+		}else if (repLen == 1) {
+			// 1ドットしか伸びてなくてしかも単独1ドットが端でない位置にある場合、削れない
+			if (x+1 != w-1 && y+1 != h-1) {
+				if (isSingleYPixel(values, x+1, y+1) && values[y+2][x+2] == 0) {
+					continue;
+				}
 			}
 		}
-		int hoge = 0;
+		// 斜め線の始点が単独１ドットの場合は、非削除対象にする
+		if (isSingleYPixel(values, x, y)) {
+			values[y][x] |= PIXEL_UNDELETABLE;
+		}
+		// 斜め線の終点が単独1ドットの場合は、非削除対象にする
+		int8_t x2 = x + repLen + 1;
+		int8_t y2 = y + repLen + 1;
+		if (x2 > 0 && y2 < h-1) {
+			if (isSingleYPixel(values, x2, y2)) {
+				values[y2][x2] |= PIXEL_UNDELETABLE;
+			}
+		}
+		for (size_t j=0; j<repLen; ++j) {
+			uint8_t x2 = x + 1 + j;
+			uint8_t y2 = y + 1 + j;
+			if (values[y2][x2] & PIXEL_UNDELETABLE) {
+				break;
+			}
+			// 斜め線で描画出来る単独1ドットは、削除対象
+			deleteList.push_back(std::make_pair(x2, y2));
+		}
+		SlantingFillInfo sf;
+		sf.x = x;
+		sf.y = y;
+		sf.dir = SlantingFillInfo::Direction_Right;
+		sFills.push_back(sf);
 	}
+
+	// 削除対象の単独1ドットの削除
+	std::vector<FillInfo> survivedVFills;
+	for (int i=0; i<vFills.size(); ++i) {
+		const FillInfo& fi = vFills[i];
+		if (fi.len == 1) {
+			uint8_t x = fi.p1;
+			uint8_t y = vFillYtoOrgY(values, x, fi.p2);
+			// 斜め線の中間ドットは開始点になれない
+			if (std::find(deleteList.begin(), deleteList.end(), std::make_pair(x, y)) != deleteList.end()) {
+				continue;
+			}
+		}
+		survivedVFills.push_back(fi);
+	}
+	vFills = survivedVFills;
+
+	g_dist[9][0][0] += sFills.size();
 	
 }
 
@@ -771,6 +720,8 @@ void push16(BitWriter& bw, uint16_t u)
 		bw.Push(u & (1<<i));
 	}
 }
+
+} // namespace anonymous
 
 std::string EncodeHeader(
 	BitWriter& bw,const BmpFontHeader& header
