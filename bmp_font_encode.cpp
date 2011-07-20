@@ -20,6 +20,8 @@ struct SlantingFillInfo
 {
 	uint8_t x;
 	uint8_t y;
+	uint8_t len;
+	uint8_t vFillIndex;
 	enum Direction {
 		Direction_Left,
 		Direction_Right,
@@ -33,6 +35,11 @@ struct SlantingFillInfo
 bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 {
 	return lhs.p1 < rhs.p1;
+}
+
+bool operator < (const SlantingFillInfo& lhs, const SlantingFillInfo& rhs)
+{
+	return lhs.vFillIndex < rhs.vFillIndex;
 }
 
 void recLineEmptyFlag(uint8_t type, BitWriter& bw, bool isNotEmpty)
@@ -49,6 +56,7 @@ enum DataType {
 	DataType_Y_MaxLen,
 	DataType_Y_Offset,
 	DataType_Y_Len,
+	DataType_S_Idx,
 };
 
 void encode_CBT(DataType type, BitWriter& bw, uint8_t n, uint8_t m)
@@ -106,6 +114,11 @@ void buildVerticalCommands(
 			beginX = std::min(beginX, fi.p2);
 			endX = std::max(endX, (uint8_t)(fi.p2+fi.len));
 		}
+#if 1
+		for (uint8_t i=0; i<bf.w_; ++i) {
+			recLineEmptyFlag(1, bw, lineFlags & (1<<i));
+		}
+#else
 		bool skipFirst = (beginX > 0);
 		bool skipLast = (endX < len1);
 		for (uint8_t i=0; i<bf.w_; ++i) {
@@ -116,12 +129,11 @@ void buildVerticalCommands(
 				continue;
 			}
 			recLineEmptyFlag(1, bw, lineFlags & (1<<i));
-//TRACE("%x", (lineFlags & (1<<i)) != 0);
 		}
-//TRACE("\r\n");
+#endif
 	}
 	// 最大線長の記録
-	// TODO: データ有効行の一番初めの塗りつぶしの開始位置を記録すれば、範囲を狭められる。
+	// TODO: データ有効行の一番初めの塗りつぶしの開始位置を先に記録すれば、範囲を狭められる。
 	encode_CBT(DataType_Y_MaxLen, bw, maxLen-1, maxLen2);
 	
 	uint8_t col = 0;
@@ -278,9 +290,22 @@ void buildSlantingCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
 	const BmpFontHeader& fontInfo,
+	const std::vector<FillInfo>& vFills,
 	std::vector<SlantingFillInfo>& sFills
 	)
 {
+	if (!vFills.size()) {
+		return;
+	}
+	// TODO: vFillの中でSlantingFillを派生出来るものは限られているので、候補数を減らせる。
+	size_t idx = 0;
+	for (size_t i=0; i<sFills.size(); ++i) {
+		const SlantingFillInfo& fi = sFills[i];
+		encode_CBT(DataType_S_Idx, bw, (fi.vFillIndex - idx)+1, vFills.size()-idx+1);
+		bw.Push(fi.dir); // TODO: 場合によっては省略出来る
+		idx = fi.vFillIndex;
+	}
+	encode_CBT(DataType_S_Idx, bw, 0, vFills.size()-idx+1);
 }
 
 bool isLineFullfilled(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t w)
@@ -540,6 +565,20 @@ uint8_t vFillYtoOrgY(const Array2D<uint8_t>& values, uint8_t x, uint8_t vy)
 	return y;
 }
 
+uint8_t findVFillIndexByTailPos(const Array2D<uint8_t>& values, const std::vector<FillInfo>& vFills, uint8_t x, uint8_t y)
+{
+	for (size_t i=0; i<vFills.size(); ++i) {
+		const FillInfo& fi = vFills[i];
+		if (fi.p1 != x) {
+			continue;
+		}
+		if (vFillYtoOrgY(values, x, fi.p2+fi.len-1) == y) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 void searchFills(
 	Array2D<uint8_t>& values,
 	std::vector<FillInfo>& hFills,
@@ -564,11 +603,11 @@ void searchFills(
 		const FillInfo& fi = vFills[vFills.size()-1-i];
 		uint8_t x = fi.p1;
 		uint8_t y = vFillYtoOrgY(values, x, fi.p2 + fi.len - 1);
-		// 末尾が後半2行の場合は、2ドット以上の斜め線を引けないので開始点の対象外とする。
-		if (y >= h-2) {
+		// 末尾が最後の行の場合は、2ドット以上の斜め線を引けないので開始点の対象外とする。
+		if (y >= h-1) {
 			continue;
 		}
-		if (fi.p1 <= 1) {
+		if (fi.p1 <= 0) {
 			continue;
 		}
 		// 斜め線の中間ドットは開始点になれない
@@ -622,6 +661,7 @@ void searchFills(
 		SlantingFillInfo sf;
 		sf.x = x;
 		sf.y = y;
+		sf.len = repLen;
 		sf.dir = SlantingFillInfo::Direction_Left;
 		sFills.push_back(sf);
 	}
@@ -631,11 +671,11 @@ void searchFills(
 		const FillInfo& fi = vFills[i];
 		uint8_t x = fi.p1;
 		uint8_t y = vFillYtoOrgY(values, x, fi.p2 + fi.len - 1);
-		// 末尾が後半2行の場合は、2ドット以上の斜め線を引けないので開始点の対象外とする。
-		if (y >= h-2) {
+		// 末尾が最後の行の場合は、斜め線を引けないので開始点の対象外とする。
+		if (y >= h-1) {
 			continue;
 		}
-		if (fi.p1 >= w-2) {
+		if (fi.p1 >= w-1) {
 			continue;
 		}
 		// 斜め線の中間ドットは開始点になれない
@@ -690,13 +730,14 @@ void searchFills(
 		SlantingFillInfo sf;
 		sf.x = x;
 		sf.y = y;
+		sf.len = repLen;
 		sf.dir = SlantingFillInfo::Direction_Right;
 		sFills.push_back(sf);
 	}
 
 	// 削除対象の単独1ドットの削除
 	std::vector<FillInfo> survivedVFills;
-	for (int i=0; i<vFills.size(); ++i) {
+	for (size_t i=0; i<vFills.size(); ++i) {
 		const FillInfo& fi = vFills[i];
 		if (fi.len == 1) {
 			uint8_t x = fi.p1;
@@ -709,7 +750,12 @@ void searchFills(
 		survivedVFills.push_back(fi);
 	}
 	vFills = survivedVFills;
-
+	
+	for (size_t i=0; i<sFills.size(); ++i) {
+		SlantingFillInfo& fi = sFills[i];
+		fi.vFillIndex = findVFillIndexByTailPos(values, vFills, fi.x, fi.y);
+	}
+	
 	g_dist[9][0][0] += sFills.size();
 	
 }
@@ -770,6 +816,7 @@ void Encode(
 	searchFills(values, hFills, vFills, sFills, vlens);
 	std::sort(hFills.begin(), hFills.end());
 	std::sort(vFills.begin(), vFills.end());
+	std::sort(sFills.begin(), sFills.end());
 	
 	std::vector<std::string> cmds;
 	char buff[32];
@@ -790,7 +837,7 @@ void Encode(
 	
 	buildHorizontalCommands(bw, bf, fontInfo, hFills);
 	buildVerticalCommands(bw, bf, fontInfo, vFills, hFills, bf.w_, vlens);
-	buildSlantingCommands(bw, bf, fontInfo, sFills);
+	buildSlantingCommands(bw, bf, fontInfo, vFills, sFills);
 
 
 }
