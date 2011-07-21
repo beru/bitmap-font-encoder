@@ -39,7 +39,11 @@ bool operator < (const FillInfo& lhs, const FillInfo& rhs)
 
 bool operator < (const SlantingFillInfo& lhs, const SlantingFillInfo& rhs)
 {
-	return lhs.vFillIndex < rhs.vFillIndex;
+	if (lhs.vFillIndex == rhs.vFillIndex) {
+		return lhs.dir < rhs.dir;
+	}else {
+		return lhs.vFillIndex < rhs.vFillIndex;
+	}
 }
 
 void recLineEmptyFlag(uint8_t type, BitWriter& bw, bool isNotEmpty)
@@ -286,6 +290,25 @@ bool isSingleYPixel(
 	return true;
 }
 
+uint8_t vFillYtoOrgY(const Array2D<uint8_t>& values, uint8_t x, uint8_t vy)
+{
+	// vFill y to original Y
+	uint8_t cnt = 0;
+	uint8_t y;
+	const uint8_t h = values.GetHeight();
+	for (y=0; y<h; ++y) {
+		uint8_t v = values[y][x];
+		if (v == PIXEL_X) {
+			continue;
+		}
+		if (cnt == vy) {
+			break;
+		}
+		++cnt;
+	}
+	return y;
+}
+
 void buildSlantingCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
@@ -298,14 +321,55 @@ void buildSlantingCommands(
 		return;
 	}
 	// TODO: vFillの中でSlantingFillを派生出来るものは限られているので、候補数を減らせる。
+	
+	// 左延長と右延長があるが、右延長をしたら次のvFillに移るというルール
+	// 同じvFillに対して左延長と右延長両方行う場合は、左を延長してから右を延長する。
+	
 	size_t idx = 0;
+	uint8_t prevIndex = -1;
 	for (size_t i=0; i<sFills.size(); ++i) {
 		const SlantingFillInfo& fi = sFills[i];
 		encode_CBT(DataType_S_Idx, bw, (fi.vFillIndex - idx)+1, vFills.size()-idx+1);
-		bw.Push(fi.dir); // TODO: 場合によっては省略出来る
+		
+		bool bRecDir = true;
+		// もし既に左延長してるのであれば、方向記録する必要が無い。（右延長決定なので）
+		if (fi.vFillIndex == prevIndex) {
+			bRecDir = false;
+		}
+		// 左端や右端の場合は延長出来る方向が限定されるので方向記録する必要が無い。
+		if (fi.x == 0 && fi.x == bf.w_-1)	{
+			bRecDir = false;
+		}
+		// 延長できる方向が限定されていないか調査（縦塗りつぶしが道を塞いでいないか）
+		for (size_t j=0; j<vFills.size(); ++j) {
+			if (j == fi.vFillIndex) {
+				continue;
+			}
+			const FillInfo& vf = vFills[j];
+			uint8_t x2 = vf.p1;
+			uint8_t y2 = vFillYtoOrgY(bf.values_, x2, vf.p2);
+			if (fi.y+1 == y2 && (fi.x-1 == x2 || fi.x+1 == x2)) {
+				bRecDir = false;
+				break;
+			}
+		}
+		if (bRecDir) {
+			bw.Push(fi.dir);
+		}
 		idx = fi.vFillIndex;
+		// 右延長が完了しているのであれば、次のvFillから数字を開始出来る。
+		if (fi.dir == SlantingFillInfo::Direction_Right) {
+			++idx;
+		}
+		prevIndex = fi.vFillIndex;
 	}
-	encode_CBT(DataType_S_Idx, bw, 0, vFills.size()-idx+1);
+	
+	// 終了コード
+
+	// 最後のvFillの右延長をしたならば、終了コードも省略出来る。
+	if (sFills.size() == 0 || idx != vFills.size()) {
+		encode_CBT(DataType_S_Idx, bw, 0, vFills.size()-idx+1);
+	}
 }
 
 bool isLineFullfilled(const std::vector<FillInfo>& fills, uint8_t p1, uint8_t w)
@@ -544,25 +608,6 @@ void searchVerticalFills(
 			}
 		}
 	}
-}
-
-uint8_t vFillYtoOrgY(const Array2D<uint8_t>& values, uint8_t x, uint8_t vy)
-{
-	// vFill y to original Y
-	uint8_t cnt = 0;
-	uint8_t y;
-	const uint8_t h = values.GetHeight();
-	for (y=0; y<h; ++y) {
-		uint8_t v = values[y][x];
-		if (v == PIXEL_X) {
-			continue;
-		}
-		if (cnt == vy) {
-			break;
-		}
-		++cnt;
-	}
-	return y;
 }
 
 uint8_t findVFillIndexByTailPos(const Array2D<uint8_t>& values, const std::vector<FillInfo>& vFills, uint8_t x, uint8_t y)
@@ -817,11 +862,6 @@ void Encode(
 	std::sort(hFills.begin(), hFills.end());
 	std::sort(vFills.begin(), vFills.end());
 	std::sort(sFills.begin(), sFills.end());
-	
-	std::vector<std::string> cmds;
-	char buff[32];
-	sprintf(buff, "(%d %d %d %d)", bf.x_, bf.y_, bf.w_, bf.h_);
-	cmds.push_back(buff);
 	
 	uint8_t recX = bf.x_ - fontInfo.minX;
 	uint8_t recY = bf.y_ - fontInfo.minY;
