@@ -27,12 +27,7 @@ public:
 	uint8_t y_;
 	uint8_t w_;
 	uint8_t h_;
-
-	enum Dir {
-		Dir_Horizontal,
-		Dir_Vertical,
-	} dir_;
-	uint8_t idx_;
+	
 };
 
 struct BmpFontHeader

@@ -266,30 +266,6 @@ void buildHorizontalCommands(
 	}
 }
 
-// 上下に連続していない単独Yピクセルかどうか
-bool isSingleYPixel(
-	const Array2D<uint8_t>& values,
-	uint8_t x, uint8_t y
-	)
-{
-	if (values[y][x] != PIXEL_Y) {
-		return false;
-	}
-	const uint8_t w = values.GetWidth();
-	const uint8_t h = values.GetHeight();
-	if (y != 0) {
-		if (values[y-1][x] & PIXEL_Y) {
-			return false;
-		}
-	}
-	if (y != h-1) {
-		if (values[y+1][x] & PIXEL_Y) {
-			return false;
-		}
-	}
-	return true;
-}
-
 uint8_t vFillYtoOrgY(const Array2D<uint8_t>& values, uint8_t x, uint8_t vy)
 {
 	// vFill y to original Y
@@ -309,6 +285,27 @@ uint8_t vFillYtoOrgY(const Array2D<uint8_t>& values, uint8_t x, uint8_t vy)
 	return y;
 }
 
+// 上下に連続していない単独Yピクセルかどうか
+bool isSingleYPixel(
+	const Array2D<uint8_t>& values,
+	std::vector<FillInfo>& vFills,
+	uint8_t x, uint8_t y
+	)
+{
+	for (size_t i=0; i<vFills.size(); ++i) {
+		const FillInfo& fi = vFills[i];
+		uint8_t x2 = fi.p1;
+		if (x2 != x || fi.len != 1) {
+			continue;
+		}
+		uint8_t y2 = vFillYtoOrgY(values, x2, fi.p2);
+		if (y2 == y) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void buildSlantingCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
@@ -320,7 +317,50 @@ void buildSlantingCommands(
 	if (!vFills.size()) {
 		return;
 	}
-	// TODO: vFillの中でSlantingFillを派生出来るものは限られているので、候補数を減らせる。
+	
+	// vFillの中でSlantingFillを派生出来るものは限られているので、候補数を減らせる。
+	std::vector<uint8_t> idxList;
+	idxList.reserve(vFills.size());
+	for (size_t i=0; i<vFills.size(); ++i) {
+		const FillInfo& fi = vFills[i];
+		uint8_t x2 = fi.p1;
+		uint8_t y2 = vFillYtoOrgY(bf.values_, x2, fi.p2+fi.len-1);
+		if (y2 == bf.h_-1) {
+			continue;
+		}
+		bool bLeftAvail = true;
+		bool bRightAvail = true;
+		if (x2 == 0) {
+			bLeftAvail = false;
+		}else if (bf.values_[y2+1][x2-1] == PIXEL_X) {
+			bLeftAvail = false;
+		}else {
+			for (size_t j=0; j<vFills.size(); ++j) {
+				const FillInfo& fi2 = vFills[j];
+				if (fi2.p1 == x2-1 && fi2.len != 1 && vFillYtoOrgY(bf.values_, fi2.p1, fi2.p2) == y2+1) {
+					bLeftAvail = false;
+					break;
+				}
+			}
+		}
+		if (x2 == bf.w_-1) {
+			bRightAvail = false;
+		}else if (bf.values_[y2+1][x2+1] == PIXEL_X) {
+			bRightAvail = false;
+		}else {
+			for (size_t j=0; j<vFills.size(); ++j) {
+				const FillInfo& fi2 = vFills[j];
+				if (fi2.p1 == x2+1 && fi2.len != 1 && vFillYtoOrgY(bf.values_, fi2.p1, fi2.p2) == y2+1) {
+					bRightAvail = false;
+					break;
+				}
+			}
+		}
+		if (!bLeftAvail && !bRightAvail) {
+			continue;
+		}
+		idxList.push_back(i);
+	}
 	
 	// 左延長と右延長があるが、右延長をしたら次のvFillに移るというルール
 	// 同じvFillに対して左延長と右延長両方行う場合は、左を延長してから右を延長する。
@@ -329,11 +369,12 @@ void buildSlantingCommands(
 	uint8_t prevIndex = -1;
 	for (size_t i=0; i<sFills.size(); ++i) {
 		const SlantingFillInfo& fi = sFills[i];
-		encode_CBT(DataType_S_Idx, bw, (fi.vFillIndex - idx)+1, vFills.size()-idx+1);
+		uint8_t ci = std::find(idxList.begin(), idxList.end(), fi.vFillIndex) - idxList.begin();
+		encode_CBT(DataType_S_Idx, bw, (ci - idx)+1, idxList.size()-idx+1);
 		
 		bool bRecDir = true;
 		// もし既に左延長してるのであれば、方向記録する必要が無い。（右延長決定なので）
-		if (fi.vFillIndex == prevIndex) {
+		if (ci == prevIndex) {
 			bRecDir = false;
 		}
 		// 左端や右端の場合は延長出来る方向が限定されるので方向記録する必要が無い。
@@ -356,12 +397,12 @@ void buildSlantingCommands(
 		if (bRecDir) {
 			bw.Push(fi.dir);
 		}
-		idx = fi.vFillIndex;
+		idx = ci;
 		// 右延長が完了しているのであれば、次のvFillから数字を開始出来る。
 		if (fi.dir == SlantingFillInfo::Direction_Right) {
 			++idx;
 		}
-		prevIndex = fi.vFillIndex;
+		prevIndex = ci;
 	}
 	
 	// 終了コード
@@ -665,7 +706,7 @@ void searchFills(
 		for (size_t j=0; j<std::min(xRemain, yRemain); ++j) {
 			uint8_t x2 = x - 1 - j;
 			uint8_t y2 = y + 1 + j;
-			if (!isSingleYPixel(values, x2, y2)) {
+			if (!isSingleYPixel(values, vFills, x2, y2)) {
 				break;
 			}
 			if (values[y2][x2] & PIXEL_UNDELETABLE) {
@@ -677,19 +718,19 @@ void searchFills(
 			continue;
 		}else if (repLen == 1) {
 			// 1ドットしか伸びてなくてしかも単独1ドットが端でない位置にある場合、削れない
-			if (isSingleYPixel(values, x-1, y+1) && x-1 != 0 && y+1 != h-1) {
+			if (isSingleYPixel(values, vFills, x-1, y+1) && x-1 != 0 && y+1 != h-1) {
 				continue;
 			}
 		}
 		// 斜め線の始点が単独１ドットの場合は、非削除対象にする
-		if (isSingleYPixel(values, x, y)) {
+		if (isSingleYPixel(values, vFills, x, y)) {
 			values[y][x] |= PIXEL_UNDELETABLE;
 		}
 		// 斜め線の終点が単独1ドットの場合は、非削除対象にする
 		int8_t x2 = x - repLen - 1;
 		int8_t y2 = y + repLen + 1;
 		if (x2 > 0 && y2 < h-1) {
-			if (isSingleYPixel(values, x2, y2)) {
+			if (isSingleYPixel(values, vFills, x2, y2)) {
 				values[y2][x2] |= PIXEL_UNDELETABLE;
 			}
 		}
@@ -733,7 +774,7 @@ void searchFills(
 		for (size_t j=0; j<std::min(xRemain, yRemain); ++j) {
 			uint8_t x2 = x + 1 + j;
 			uint8_t y2 = y + 1 + j;
-			if (!isSingleYPixel(values, x2, y2)) {
+			if (!isSingleYPixel(values, vFills, x2, y2)) {
 				break;
 			}
 			if (values[y2][x2] & PIXEL_UNDELETABLE) {
@@ -746,20 +787,20 @@ void searchFills(
 		}else if (repLen == 1) {
 			// 1ドットしか伸びてなくてしかも単独1ドットが端でない位置にある場合、削れない
 			if (x+1 != w-1 && y+1 != h-1) {
-				if (isSingleYPixel(values, x+1, y+1) && values[y+2][x+2] == 0) {
+				if (isSingleYPixel(values, vFills, x+1, y+1) && values[y+2][x+2] == 0) {
 					continue;
 				}
 			}
 		}
 		// 斜め線の始点が単独１ドットの場合は、非削除対象にする
-		if (isSingleYPixel(values, x, y)) {
+		if (isSingleYPixel(values, vFills, x, y)) {
 			values[y][x] |= PIXEL_UNDELETABLE;
 		}
 		// 斜め線の終点が単独1ドットの場合は、非削除対象にする
 		int8_t x2 = x + repLen + 1;
 		int8_t y2 = y + repLen + 1;
 		if (x2 > 0 && y2 < h-1) {
-			if (isSingleYPixel(values, x2, y2)) {
+			if (isSingleYPixel(values, vFills, x2, y2)) {
 				values[y2][x2] |= PIXEL_UNDELETABLE;
 			}
 		}
