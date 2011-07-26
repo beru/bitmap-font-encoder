@@ -97,7 +97,7 @@ void incBitLength(
 
 void BuildCanonicalHuffmanCodes(CHC_Entry* entries, size_t entryLen)
 {
-	TreeNode nodes[16] = {0};
+	TreeNode nodes[128] = {0};
 	uint8_t nodeLen = 0;
 	
 	std::sort(entries, entries+entryLen, compareEntryByCnt);			

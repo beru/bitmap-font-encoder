@@ -5,7 +5,7 @@
 #include "misc.h"
 #include "integer_coding.h"
 
-extern uint32_t g_dist[17][17][17];
+extern uint32_t g_dist[17][33][33];
 
 namespace {
 
@@ -78,6 +78,16 @@ void encode_Alpha(uint8_t type, BitWriter& bw, uint8_t n)
 	++g_dist[7][type][n];
 }
 
+uint32_t makeLineEmptyFlags(const std::vector<FillInfo>& fills)
+{
+	uint16_t ret = 0;
+	for (size_t i=0; i<fills.size(); ++i) {
+		const FillInfo& fi = fills[i];
+		ret |= 1 << fi.p1;
+	}
+	return ret;
+}
+
 void buildVerticalCommands(
 	BitWriter& bw,
 	const BitmapFont& bf,
@@ -90,7 +100,7 @@ void buildVerticalCommands(
 {
 	if (vFills.size() == 0) {
 		// 全部改行！
-		for (uint8_t i=0; i<fontInfo.maxW; ++i) {
+		for (uint8_t i=0; i<bf.w_; ++i) {
 			recLineEmptyFlag(1, bw, false);
 		}
 		return;
@@ -101,11 +111,9 @@ void buildVerticalCommands(
 	uint8_t maxLen2 = 0;
 	{
 		// 空行かどうかの記録
-		uint32_t lineFlags = 0;
 		for (size_t i=0; i<vFills.size(); ++i) {
 			const FillInfo& fi = vFills[i];
 			maxLen = std::max(maxLen, fi.len);
-			lineFlags |= 1 << fi.p1;
 			maxLen2 = std::max(maxLen2, len2s[fi.p1]);
 		}
 
@@ -118,6 +126,7 @@ void buildVerticalCommands(
 			beginX = std::min(beginX, fi.p2);
 			endX = std::max(endX, (uint8_t)(fi.p2+fi.len));
 		}
+		uint32_t lineFlags = makeLineEmptyFlags(vFills);
 #if 1
 		for (uint8_t i=0; i<bf.w_; ++i) {
 			recLineEmptyFlag(1, bw, lineFlags & (1<<i));
@@ -193,7 +202,7 @@ void buildHorizontalCommands(
 {
 	if (fills.size() == 0) {
 		// 全部改行！
-		for (uint8_t i=0; i<fontInfo.maxH; ++i) {
+		for (uint8_t i=0; i<bf.h_; ++i) {
 			recLineEmptyFlag(0, bw, false);
 		}
 		return;
@@ -202,12 +211,11 @@ void buildHorizontalCommands(
 	uint8_t maxLen = 1; // 塗りつぶし最大長
 	// 空行かどうかの記録
 	{
-		uint16_t lineFlags = 0;
 		for (size_t i=0; i<fills.size(); ++i) {
 			const FillInfo& fi = fills[i];
 			maxLen = std::max(maxLen, fi.len);
-			lineFlags |= 1 << fi.p1;
 		}
+		uint32_t lineFlags = makeLineEmptyFlags(fills);
 		for (uint8_t i=0; i<bf.h_; ++i) {
 			recLineEmptyFlag(0, bw, lineFlags & (1<<i));
 		}
@@ -673,6 +681,13 @@ void searchFills(
 	uint8_t* vlens
 	)
 {
+	// 各字がどのようにModelingされているのか視覚的に分かるようにする。
+	
+	// TODO: 木という字の左右の枝は、縦線の1ドットから生やせられる事が多い。横棒を無駄に作らない。
+	// 長い縦線の横から枝が出る場合、横線2ドットがあるけれど、横棒にしないで、縦線に隣接した1ドットの縦点から枝を生やすようにする。
+	
+	// TODO: 溶という字の口の上側の横棒が斜め線をさえぎらないようにする。
+	
 	searchHorizontalFills(values, hFills);
 	searchVerticalFills(values, vFills, vlens);
 	
@@ -887,12 +902,81 @@ std::string EncodeHeader(
 	return buff;
 }
 
+void EncodeBoxTable(class BitWriter& bw, const BoxInfo* pBoxes, uint8_t cnt, uint8_t regIdx, const BmpFontHeader& header)
+{
+	integerEncode_Gamma(bw, cnt);
+	integerEncode_Gamma(bw, regIdx);
+	for (uint8_t i=0; i<cnt; ++i) {
+		if (i == regIdx) {
+			continue;
+		}
+		const BoxInfo& bi = pBoxes[i];
+		uint8_t recX = bi.x - header.minX;
+		uint8_t recY = bi.y - header.minY;
+		uint8_t recW = header.maxW - (bi.x + bi.w);
+		uint8_t recH = header.maxH - (bi.y + bi.h);
+		integerEncode_Gamma(bw, bi.bitLen-1);
+		encode_Alpha(0, bw, recX);
+		encode_Alpha(1, bw, recY);
+		encode_Alpha(2, bw, recW);
+		encode_Alpha(3, bw, recH);
+	}
+}
+
+uint8_t countMaxRepBits(uint32_t flags)
+{
+	uint8_t cnt = 0;
+	uint8_t maxCnt = 0;
+	for (uint8_t i=0; i<sizeof(flags)*8; ++i) {
+		if (flags & (1<<i)) {
+			++cnt;
+		}else {
+			maxCnt = std::max(maxCnt, cnt);
+			cnt = 0;
+		}
+	}
+	maxCnt = std::max(maxCnt, cnt);
+	return maxCnt;
+}
+
 void Encode(
 	BitWriter& bw,
 	const BitmapFont& bf,
-	const BmpFontHeader& fontInfo
+	const BmpFontHeader& fontInfo,
+	const BoxInfo* pBoxes, uint8_t cnt, uint8_t regIdx
 	)
 {
+	// Box記録
+	uint8_t boxTableIdx = regIdx;
+	for (uint8_t i=0; i<cnt; ++i) {
+		const BoxInfo& bi = pBoxes[i];
+		if (1
+			&& bf.x_ == bi.x
+			&& bf.y_ == bi.y
+			&& bf.w_ == bi.w
+			&& bf.h_ == bi.h
+			)
+		{
+			boxTableIdx = i;
+			break;
+		}
+	}
+	const BoxInfo& bi = pBoxes[boxTableIdx];
+	for (uint8_t i=0; i<bi.bitLen; ++i) {
+		bw.Push(bi.chc & (1 << i));
+	}
+	if (boxTableIdx == regIdx) {
+		uint8_t recX = bf.x_ - fontInfo.minX;
+		uint8_t recY = bf.y_ - fontInfo.minY;
+		uint8_t recW = fontInfo.maxW - (bf.x_ + bf.w_);
+		uint8_t recH = fontInfo.maxH - (bf.y_ + bf.h_);
+		encode_Alpha(0, bw, recX);
+		encode_Alpha(1, bw, recY);
+		encode_Alpha(2, bw, recW);
+		encode_Alpha(3, bw, recH);
+	}
+	
+	// 塗りつぶし記録
 	std::vector<FillInfo> hFills;
 	std::vector<FillInfo> vFills;
 	std::vector<SlantingFillInfo> sFills;
@@ -904,18 +988,21 @@ void Encode(
 	std::sort(vFills.begin(), vFills.end());
 	std::sort(sFills.begin(), sFills.end());
 	
-	uint8_t recX = bf.x_ - fontInfo.minX;
-	uint8_t recY = bf.y_ - fontInfo.minY;
-	uint8_t recW = fontInfo.maxW - (bf.x_ + bf.w_);
-	uint8_t recH = fontInfo.maxH - (bf.y_ + bf.h_);
-	// TODO: 0より1が圧倒的に多いので…。。ただ要適切に対処
-	recX = (recX == 0 ? 15 : recX-1);
-	encode_Alpha(0, bw, recX);
-	encode_Alpha(1, bw, recY);
-//	assert(bf.w_ != 0 && bf.h_ != 0);
-	encode_Alpha(2, bw, recW);
-	encode_Alpha(3, bw, recH);
+	uint32_t lineFlagsH = makeLineEmptyFlags(hFills);
+	uint32_t lineFlagsV = makeLineEmptyFlags(vFills);
+	const uint8_t SHIFTS = sizeof(lineFlagsV) - bf.h_;
+	lineFlagsV = ((~lineFlagsV) << SHIFTS) >> SHIFTS;
+	uint32_t lineFlags = lineFlagsH | (lineFlagsV << bf.h_);
+//	uint32_t lineFlags = lineFlagsV;
+//	++g_dist[10][bf.w_][countBits32(lineFlags)];
+	if (bf.w_+bf.h_ >= 30) {
+		uint8_t nBits = countBits32(lineFlags);
+		uint8_t repBits = countMaxRepBits(lineFlags);
+		++g_dist[10][nBits][repBits];
+		++g_dist[10][bf.w_+bf.h_][nBits];
+	}
 	
+
 	buildHorizontalCommands(bw, bf, fontInfo, hFills);
 	buildVerticalCommands(bw, bf, fontInfo, vFills, hFills, bf.w_, vlens);
 	buildSlantingCommands(bw, bf, fontInfo, vFills, sFills);

@@ -58,7 +58,7 @@ void loadUnicodeBDFdata(
 	loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, data);
 }
 
-uint32_t g_dist[17][17][17];
+uint32_t g_dist[17][33][33];
 
 
 void chcTest()
@@ -101,6 +101,82 @@ void chcTest()
 	}
 }
 
+void countBoxInfo(const BitmapFont& bf, std::vector<BoxInfo>& boxInfos)
+{
+	bool bFound = false;
+	for (size_t i=0; i<boxInfos.size(); ++i) {
+		BoxInfo& bi = boxInfos[i];
+		if (1
+			&& bi.x == bf.x_
+			&& bi.y == bf.y_
+			&& bi.w == bf.w_
+			&& bi.h == bf.h_
+			) {
+			++bi.cnt;
+			bFound = true;
+			break;
+		}
+	}
+	if (!bFound) {
+		BoxInfo bi;
+		bi.x = bf.x_;
+		bi.y = bf.y_;
+		bi.w = bf.w_;
+		bi.h = bf.h_;
+		bi.cnt = 1;
+		boxInfos.push_back(bi);
+	}
+}
+
+uint8_t calcBoxInfoCHCEntries(
+	std::vector<BoxInfo>& infos,
+	std::vector<CHC_Entry>& entries,
+	uint8_t size
+	)
+{
+	std::sort(infos.rbegin(), infos.rend());
+	uint16_t cnt = 0;
+	for (size_t i=size-1; i<infos.size(); ++i) {
+		const BoxInfo& bi = infos[i];
+		cnt += bi.cnt;
+	}
+	BoxInfo& bi = infos[size-1];
+	bi.x = 0xFF;
+	bi.y = 0xFF;
+	bi.w = 0xFF;
+	bi.h = 0xFF;
+	bi.cnt = cnt;
+	std::sort(infos.rbegin(), infos.rend());
+	
+	entries.resize(size);
+	for (size_t i=0; i<size; ++i) {
+		CHC_Entry& e = entries[i];
+		const BoxInfo& bi = infos[i];
+		e.cnt = bi.cnt;
+		e.code = i;
+		e.bitLen = 0;
+		e.chc = 0;
+	}
+	uint8_t idx = -1;
+	BuildCanonicalHuffmanCodes(&entries[0], size);
+	for (size_t i=0; i<size; ++i) {
+		const CHC_Entry& e = entries[i];
+		BoxInfo& bi = infos[i];
+		bi.bitLen = e.bitLen;
+		bi.chc = e.chc;
+
+		if (1
+			&& bi.x == 0xFF
+			&& bi.y == 0xFF
+			&& bi.w == 0xFF
+			&& bi.h == 0xFF
+			) {
+			idx = i;
+		}
+	}
+	return idx;
+}
+
 void encodeCharacters(
 	const BDF::Header& header,
 	const std::vector<BDF::CharacterSegment>& segments,
@@ -141,6 +217,19 @@ void encodeCharacters(
 	bmpFontHeader.characterCount = strLen;
 	bmpFontHeader.characterCodes = &strs[0];
 	fputs(EncodeHeader(bitWriter, bmpFontHeader).c_str(), of);
+
+	std::vector<BoxInfo> boxInfos;
+	for (size_t i=0; i<strLen; ++i) {
+		uint16_t idx = idxs[i];
+		loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, bitmapData);
+		bmpFont.Compact();
+		countBoxInfo(bmpFont, boxInfos);
+	}
+	size_t chcEntryCount = 16;
+	std::vector<CHC_Entry> chcEntries;
+	uint8_t regIdx = calcBoxInfoCHCEntries(boxInfos, chcEntries, chcEntryCount);
+	EncodeBoxTable(bitWriter, &boxInfos[0], chcEntryCount, regIdx, bmpFontHeader);
+	
 	for (size_t i=0; i<strLen; ++i) {
 		uint16_t idx = idxs[i];
 		loadBDFdata(bmpFont, idx, segments, segDataSize, hBytes, bitmapData);
@@ -150,7 +239,7 @@ void encodeCharacters(
 		size_t oldNBits = bitWriter.GetNBits();
 //TRACE("%d\r\n", bitWriter.GetNBits());
 
-		Encode(bitWriter, bmpFont, bmpFontHeader);
+		Encode(bitWriter, bmpFont, bmpFontHeader, &boxInfos[0], chcEntryCount, regIdx);
 //			fprintf(of, "num of bits : %8d\r\n", bitWriter.GetNBits()-oldNBits);
 	}
 }
