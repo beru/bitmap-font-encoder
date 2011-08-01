@@ -208,12 +208,14 @@ void buildHorizontalCommands(
 		return;
 	}
 	
-	uint8_t maxLen = 1; // 塗りつぶし最大長
+	uint8_t maxLen = 2; // 塗りつぶし最大長
 	// 空行かどうかの記録
 	{
 		for (size_t i=0; i<fills.size(); ++i) {
 			const FillInfo& fi = fills[i];
-			maxLen = std::max(maxLen, fi.len);
+			if (fi.len != 0xFF) {
+				maxLen = std::max(maxLen, fi.len);
+			}
 		}
 		uint32_t lineFlags = makeLineEmptyFlags(fills);
 		for (uint8_t i=0; i<bf.h_; ++i) {
@@ -223,10 +225,9 @@ void buildHorizontalCommands(
 	
 	// TODO: データ有効行の一番初めの塗りつぶしの開始位置を先に記録すれば、範囲を狭められる。
 	// 最大線長の記録
-	assert(maxLen >= 2);
 	encode_CBT(DataType_X_MaxLen, bw, maxLen-2, bf.w_-1);
 	
-	uint8_t col = 0;
+	uint16_t col = 0;
 	uint8_t row = fills[0].p1;
 	for (size_t i=0; i<fills.size(); ++i) {
 		const FillInfo& fi = fills[i];
@@ -249,6 +250,7 @@ void buildHorizontalCommands(
 		assert(fi.p2 <= bf.w_-2);
 		uint8_t remain = bf.w_ - fi.p2;
 		if (remain <= 2) {
+			// TODO: 横塗りつぶしの長さが最小2ドットならば長さを基準に記録する必要は無いはず。末尾だけ1ドットも許可している？
 			if (offset == 0) {
 				// offset == 0 do not record
 			}else {
@@ -259,7 +261,15 @@ void buildHorizontalCommands(
 		}else {
 			assert(fi.len >= 2);
 			encode_CBT(DataType_X_Offset, bw, offset, bf.w_-1-col);
-			encode_CBT(DataType_X_Len, bw, fi.len-2, std::min(maxLen, remain)-2+1);
+			uint8_t limit = std::min(remain, maxLen);
+			// 末尾までの塗りつぶしを特別視
+			// 横塗りつぶしは最小長さが2ドットなので、最大長さ-2までの記録で済むけれど、最大長さ-1を末尾までの塗りつぶしに割り当てる。
+			// 末尾までの塗りつぶしを特別に割り当てる事で全体の記録長を短くする。
+			if (fi.len == 0xFF) {
+				encode_CBT(DataType_X_Len, bw, limit-1, limit);
+			}else {
+				encode_CBT(DataType_X_Len, bw, fi.len-2, limit);
+			}
 		}
 		
 		if (col == 0) {
@@ -609,7 +619,16 @@ void searchHorizontalFills(
 		}
 	}
 #endif
-
+	
+	// 終端（右端）までの塗りつぶしを特別視
+	for (size_t i=0; i<hFills.size(); ++i) {
+		FillInfo& fi = hFills[i];
+		if (fi.p2 + 2 < w) { // 短いのは無視
+			if (fi.p2 + fi.len == w) {
+				fi.len = 0xFF;
+			}
+		}
+	}
 }
 
 void searchVerticalFills(
@@ -943,7 +962,8 @@ void Encode(
 	BitWriter& bw,
 	const BitmapFont& bf,
 	const BmpFontHeader& fontInfo,
-	const BoxInfo* pBoxes, uint8_t cnt, uint8_t regIdx
+	const BoxInfo* pBoxes, uint8_t cnt,
+	uint8_t regIdx // etcetera index
 	)
 {
 	// Box記録
@@ -961,10 +981,12 @@ void Encode(
 			break;
 		}
 	}
+	// 領域データ CHC符号でindex記録
 	const BoxInfo& bi = pBoxes[boxTableIdx];
 	for (uint8_t i=0; i<bi.bitLen; ++i) {
 		bw.Push(bi.chc & (1 << i));
 	}
+	// 頻度が少ない記録なので領域を個別に定義
 	if (boxTableIdx == regIdx) {
 		uint8_t recX = bf.x_ - fontInfo.minX;
 		uint8_t recY = bf.y_ - fontInfo.minY;
