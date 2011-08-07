@@ -1,0 +1,96 @@
+<html>
+
+<head>
+<title>bitmap font parse lines</title>
+</head>
+<script type="text/javascript">
+
+var $ = function (name) {
+	return document.getElementById(name);
+}
+
+/*
+var req = new XMLHttpRequest();
+req.open('GET', 'file:///home/user/file.json', false); 
+req.send(null);
+if (req.status == 0)
+  dump(req.responseText);
+*/
+
+var DEFAULT_SRC = "file:///C:/projects/bitmap_font_encoder/shnm16.png";
+var img = new Image();
+var ctx;
+var fontSize = 0;
+var nCols;
+var nRows;
+
+window.onload = function () {
+	ctx = $("canvas").getContext("2d");
+	$("defaultSrc").innerHTML = DEFAULT_SRC;
+	img.src = DEFAULT_SRC;
+}
+
+img.onload = function () {
+	$("imageInfo").innerHTML = ""
+		+ "width : " + img.width + "<br>"
+		+ "height : " + img.height + "<br>"
+	;
+	setFontSize();
+	setCharCode();
+};
+
+function loadImage(file) {
+	var fr = new FileReader();
+	fr.onload = function () {
+		img.src = fr.result;
+	}
+	fr.readAsDataURL(file);
+
+}
+
+
+function setFontSize() {
+	fontSize = Number($("fontSize").value);
+	nCols = img.width / fontSize;
+	nRows = img.height / fontSize;
+	$("fontInfo").innerHTML = ""
+		+ "nCols : " + nCols + "<br>"
+		+ "nRows : " + nRows
+	;
+}
+
+function setCharCode() {
+	var code = $("charCode").value;
+	var row = Math.floor(code / nCols);
+	var col = code % nCols;
+	
+	ctx.mozImageSmoothingEnabled = false;
+	ctx.clearRect(0,0,ctx.width,ctx.height)
+	ctx.font = "12pt Arial";
+	ctx.fillText("aaa", 10, 10);
+	ctx.save();
+	ctx.scale(32,32);
+	ctx.drawImage(
+		img,
+		col*fontSize, row*fontSize, fontSize, fontSize,
+		0,0,16,16
+		);
+	ctx.restore();
+	
+}
+
+</script>
+<body style="background-color:#aaa; line-height:150%;">
+
+default src : <span id="defaultSrc"></span><br>
+load file : <input type="file" size="80" onchange="loadImage(this.files[0]);" /><br>
+<span id="imageInfo"></span>
+font size : <input id="fontSize" type="number" value="16" min="0" max="32" /><input type="button" value="set" onclick="setFontSize();" /><br>
+<span id="fontInfo"></span><br>
+char code : <input id="charCode" type="number" default="150" min="0" /><input type="button" value="set" onclick="setCharCode();" /><br>
+<br>
+<canvas id="canvas" width="512" height="512"></canvas>
+
+
+</body>
+</html>
