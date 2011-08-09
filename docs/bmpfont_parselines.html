@@ -18,13 +18,12 @@ if (req.status == 0)
   dump(req.responseText);
 */
 
-var DEFAULT_SRC = "file:///C:/projects/bitmap_font_encoder/shnm16.png";
+var DEFAULT_SRC = "../shnm16.png";
 var img = new Image();
 var ctx;
 var fontSize = 0;
 var nCols;
 var nRows;
-var pixels;
 
 window.onload = function () {
 	ctx = $("canvas").getContext("2d");
@@ -67,10 +66,73 @@ function setCharCode() {
 	var row = Math.floor(code / nCols);
 	var col = code % nCols;
 	
-	renderChar(row, col);
+	processChar(row, col);
 }
 
-function renderChar(row, col)
+function getBoxInfo(pixels, fontSize)
+{
+	var minX = fontSize;
+	var minY = fontSize;
+	var maxX = 0;
+	var maxY = 0;
+	for (var y=0; y<fontSize; ++y) {
+		for (var x=0; x<fontSize; ++x) {
+			if (pixels[y*fontSize+x]) {
+				minX = Math.min(minX, x);
+				minY = Math.min(minY, y);
+				maxX = Math.max(maxX, x);
+				maxY = Math.max(maxY, y);
+			}
+		}
+	}
+	return { x : minX, y : minY, w : maxX - minX + 1, h : maxY - minY + 1 };
+}
+
+function renderPixelsGrid(blockSize, ox, oy, bw, bh, pixels)
+{
+	var ox2 = ox + blockSize * 1;
+	var oy2 = oy + blockSize * 1;0
+	ctx.strokeRect(ox2-1, oy2-1, bw*blockSize+4, bh*blockSize+4);
+	for (var y=0; y<bh; ++y) {
+		for (var x=0; x<bw; ++x) {
+			if (pixels[y*bw+x]) {
+				ctx.fillStyle = "#000000";
+			}else {
+				ctx.fillStyle = "#FFFFFF";
+			}
+			ctx.fillRect(ox2+x*blockSize+2, oy2+y*blockSize+2, blockSize-2, blockSize-2);
+		}
+	}
+	ctx.textBaseline = "top";
+	ctx.font = (blockSize - 5).toString() + "px Arial";
+	ctx.fillStyle = "darkblue";
+	for (var i=0; i<bw; ++i) {
+		var met = ctx.measureText(i).width;
+		var x = ox2 + blockSize*i + (blockSize-met)/2;
+		ctx.fillText(i, x, oy);
+		ctx.fillText(i, x, oy2 + blockSize*(bh+0.5));
+	}
+	for (var i=0; i<bh; ++i) {
+		var met = ctx.measureText(i).width;
+		var x = ox + (blockSize-met)/2 - blockSize * 0.3;
+		var y = oy2 + blockSize*i+4;
+		ctx.fillText(i, x, y);
+		ctx.fillText(i, x+blockSize*(bw+1.6), y);
+	}
+}
+
+function compact(pixels, boxInfo)
+{
+	var arr = new Array(boxInfo.w * boxInfo.h);
+	for (var y=0; y<boxInfo.h; ++y) {
+		for (var x=0; x<boxInfo.w; ++x) {
+			arr[y*boxInfo.w+x] = pixels[(boxInfo.y+y)*fontSize+boxInfo.x+x];
+		}
+	}
+	return arr;
+}
+
+function processChar(row, col)
 {
 	ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height)
 	ctx.drawImage(
@@ -86,40 +148,22 @@ function renderChar(row, col)
 		}
 	}
 	
+	var boxInfo = getBoxInfo(pixels, fontSize);
+	$("boxInfo").innerHTML = "box info<br>"
+		+ "<div style='padding-left: 1.0em;'>"
+		+ "x : " + boxInfo.x + "<br>"
+		+ "y : " + boxInfo.y + "<br>"
+		+ "w : " + boxInfo.w + "<br>"
+		+ "h : " + boxInfo.h + "<br>"
+		+ "</div>"
+	;
 	
-	var BLOCK_SIZE = 24;
+	// TODO:
+	// searchFills (horizontal vertical slanting
+	// 
+	pixels = compact(pixels, boxInfo);
+	renderPixelsGrid(20, 10, 10, boxInfo.w, boxInfo.h, pixels);
 	
-	var ox = BLOCK_SIZE * 2;
-	var oy = BLOCK_SIZE * 2;
-	
-	ctx.strokeRect(ox-1, oy-1, fontSize*BLOCK_SIZE+4, fontSize*BLOCK_SIZE+4);
-	for (var y=0; y<fontSize; ++y) {
-		for (var x=0; x<fontSize; ++x) {
-			if (pixels[y*fontSize+x]) {
-				ctx.fillStyle = "#000000";
-			}else {
-				ctx.fillStyle = "#FFFFFF";
-			}
-			ctx.fillRect(ox+x*BLOCK_SIZE+2, oy+y*BLOCK_SIZE+2, BLOCK_SIZE-2, BLOCK_SIZE-2);
-		}
-	}
-	
-	ctx.textBaseline = "top";
-	ctx.font = (BLOCK_SIZE - 5).toString() + "px Arial";
-	ctx.fillStyle = "darkblue";
-	for (var i=0; i<fontSize; ++i) {
-		var met = ctx.measureText(i).width;
-		var x = ox+BLOCK_SIZE*i + (BLOCK_SIZE-met)/2;
-		ctx.fillText(i, x, BLOCK_SIZE);
-		ctx.fillText(i, x, BLOCK_SIZE*(fontSize+2.4));
-		
-		var x = BLOCK_SIZE * 0.8 + (BLOCK_SIZE-met)/2;
-		var y = oy+BLOCK_SIZE*i+4;
-		ctx.fillText(i, x, y);
-		ctx.fillText(i, x+BLOCK_SIZE*(fontSize+1.6), y);
-		
-//		ctx.fillRect(BLOCK_SIZE * 0.5 + (BLOCK_SIZE-met)/2, oy+BLOCK_SIZE*i, 10, 10);
-	}
 }
 
 </script>
@@ -138,7 +182,7 @@ load file : <input type="file" size="80" onchange="loadImage(this.files[0]);" />
 font size : <input id="fontSize" type="number" value="16" min="0" max="32" onkeydown="if (event.which==13) setFontSize();" /><input type="button" value="set" onclick="setFontSize();" /><br>
 <span id="fontInfo"></span><br>
 char code : <input id="charCode" type="number" default="150" min="0" onkeydown="if (event.which==13) setCharCode();" /><input type="button" value="set" onclick="setCharCode();" /><br>
-<br>
+<span id="boxInfo"></span><br>
 <canvas id="canvas" width="512" height="512"></canvas>
 
 
