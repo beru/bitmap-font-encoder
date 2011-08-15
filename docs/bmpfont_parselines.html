@@ -132,6 +132,49 @@ function compact(pixels, boxInfo)
 	return arr;
 }
 
+function searchHorizontalFills(pixels, boxInfo)
+{
+	// 横方向の２ドット以上の連続塗りつぶしを調査、１ドットは縦方向の塗りに任せる
+	for (var y=0; y<boxInfo.h; ++y) {
+		
+		
+		
+	}
+	
+	// 連続塗りつぶし
+		// 他の塗りつぶしに遮られるか？
+		// 他の塗りつぶしを遮るか？
+	
+	
+	
+}
+
+function searchVerticalFills(pixels, boxInfo, horizontal)
+{
+	
+}
+
+function searchSlantingFills(pixels, boxInfo, horizontal, vertical)
+{
+	
+}
+
+function searchFills(pixels, boxInfo)
+{
+	var fills = {};
+	
+	// horizontal
+	fills.horizontal = searchHorizontalFills(pixels, boxInfo);
+	
+	// vertical
+	fills.vertical = searchVerticalFills(pixels, boxInfo, fills.horizontal);
+	
+	// slanting
+	fills.slanting = searchSlantingFills(pixels, boxInfo, fills.horizontal, fills.vertical);
+	
+	return fills;
+}
+
 function processChar(row, col)
 {
 	ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height)
@@ -158,10 +201,8 @@ function processChar(row, col)
 		+ "</div>"
 	;
 	
-	// TODO:
-	// searchFills (horizontal vertical slanting
-	// 
 	pixels = compact(pixels, boxInfo);
+	fills = searchFills(pixels, boxInfo);
 	renderPixelsGrid(20, 10, 10, boxInfo.w, boxInfo.h, pixels);
 	
 }
