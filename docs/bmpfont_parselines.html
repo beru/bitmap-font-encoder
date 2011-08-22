@@ -6,7 +6,7 @@
 
 // http://www.html5.jp/canvas/ref.html
 
-var $ = function (name) {
+function $(name) {
 	return document.getElementById(name);
 }
 
@@ -71,6 +71,7 @@ function arr2tbl(arr)
 	for (var i=0; i<arr.length; ++i) {
 		var row = tbl.insertRow(-1);
 		var o = arr[i];
+		row.data = o;
 		for (var j=0; j<keys.length; ++j) {
 			var c = row.insertCell(-1);
 			c.innerHTML = o[keys[j]];
@@ -103,6 +104,7 @@ var ctx;
 var fontSize = 0;
 var nCols;
 var nRows;
+var focusLine;
 
 window.onload = function () {
 	ctx = $("canvas").getContext("2d");
@@ -182,6 +184,23 @@ function renderPixelsGrid(blockSize, ox, oy, pixels)
 				ctx.fillStyle = "#FFFFFF";
 			}
 			ctx.fillRect(ox2+x*blockSize+2, oy2+y*blockSize+2, blockSize-2, blockSize-2);
+			
+			if (focusLine) {
+				var bDraw = false;
+				if (focusLine.dir == "h") {
+					if (focusLine.y == y && x >= focusLine.x && x < focusLine.x+focusLine.len) {
+						bDraw = true;
+					}
+				}else {
+					if (focusLine.x == x && y >= focusLine.y && y < focusLine.y+focusLine.len) {
+						bDraw = true;
+					}
+				}
+				if (bDraw) {
+					ctx.fillStyle = "#00FF00";
+					ctx.fillRect(ox2+x*blockSize+2, oy2+y*blockSize+2, blockSize-2, blockSize-2);
+				}
+			}
 		}
 	}
 	ctx.textBaseline = "top";
@@ -249,6 +268,7 @@ function searchFills(pixels)
 			if (len > 1) {
 				hFills.push(
 					{
+						"dir" : "h",
 						"x" : x,
 						"y" : y,
 						"len" : len
@@ -270,9 +290,10 @@ function searchFills(pixels)
 			if (len > 1) {
 				vFills.push(
 					{
+						"dir" : "v",
 						"x" : x,
 						"y" : y,
-						"len" : len
+						"len" : len,
 					}
 				);
 			}
@@ -313,6 +334,7 @@ function searchFills(pixels)
 			}else {
 				vFills.push(
 					{
+						"dir" : "v",
 						"x" : x,
 						"y" : y,
 						"len" : 1
@@ -326,6 +348,18 @@ function searchFills(pixels)
 	
 	
 	return fills;
+}
+
+function setOnMouseOver(tbl)
+{
+	var className = "hover";
+	var rows = tbl.getElementsByTagName("tr");
+	for (var i=0; i<rows.length; ++i) {
+		var row = rows[i];
+		row.baseName = row.className;
+		row.onmouseover = function() { this.className = className; focusLine = this.data; setCharCode(); }
+		row.onmouseout = function() { this.className = this.baseName; }
+	}
 }
 
 function processChar(row, col)
@@ -363,14 +397,19 @@ function processChar(row, col)
 	fills = searchFills(pixels);
 	renderPixelsGrid(20, 10, 10, pixels);
 	
-	removeChildren($("horizontal_fills")).appendChild(
-		arr2tbl(fills.horizontal_fills)
-		);
-	removeChildren($("vertical_fills")).appendChild(
-		arr2tbl(fills.vertical_fills)
-		);
+	var ctn, tbl;
 	
+	ctn = $("horizontal_fills");
+	removeChildren(ctn);
+	tbl = arr2tbl(fills.horizontal_fills);
+	setOnMouseOver(tbl);
+	ctn.appendChild(tbl);
 	
+	ctn = $("vertical_fills");
+	removeChildren(ctn);
+	tbl = arr2tbl(fills.vertical_fills);
+	setOnMouseOver(tbl);
+	ctn.appendChild(tbl);
 }
 
 </script>
@@ -400,6 +439,11 @@ table td {
     text-align: center;
 }
 
+tr.hover {
+    background-color: #cccccc;
+}
+
+
 -->
 </style>
 </head>
@@ -418,7 +462,7 @@ char code : <input id="charCode" type="number" default="150" min="0" onkeydown="
 <canvas id="canvas" style="position:relative; top:0px; left:0px; border-style:solid; border-width:1px;"width="512" height="512"></canvas>
 
 <div id="horizontal_fills" style="position:absolute; top:0px; left:532px;"></div>
-<div id="vertical_fills" style="position:absolute; top:0px; left:632px;"></div>
+<div id="vertical_fills" style="position:absolute; top:0px; left:670px;"></div>
 
 
 </div>
