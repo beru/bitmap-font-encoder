@@ -118,7 +118,7 @@ img.onload = function () {
 		+ "width : " + img.width + "<br>"
 		+ "height : " + img.height + "<br>"
 	;
-	setFontSize();
+	setFontSize(1);
 };
 
 function loadImage(file) {
@@ -142,12 +142,12 @@ function setFontSize() {
 	setCharCode();
 }
 
-function setCharCode() {
+function setCharCode(updateTable) {
 	var code = $("charCode").value;
 	var row = Math.floor(code / nCols);
 	var col = code % nCols;
 	
-	processChar(row, col);
+	processChar(row, col, updateTable);
 }
 
 function getBoxInfo(pixels, fontSize)
@@ -357,12 +357,12 @@ function setOnMouseOver(tbl)
 	for (var i=0; i<rows.length; ++i) {
 		var row = rows[i];
 		row.baseName = row.className;
-		row.onmouseover = function() { this.className = className; focusLine = this.data; setCharCode(); }
+		row.onmouseover = function() { this.className = className; focusLine = this.data; setTimeout("setCharCode(0);", 10); }
 		row.onmouseout = function() { this.className = this.baseName; }
 	}
 }
 
-function processChar(row, col)
+function processChar(row, col, updateTable)
 {
 	ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height)
 	ctx.drawImage(
@@ -397,19 +397,21 @@ function processChar(row, col)
 	fills = searchFills(pixels);
 	renderPixelsGrid(20, 10, 10, pixels);
 	
-	var ctn, tbl;
-	
-	ctn = $("horizontal_fills");
-	removeChildren(ctn);
-	tbl = arr2tbl(fills.horizontal_fills);
-	setOnMouseOver(tbl);
-	ctn.appendChild(tbl);
-	
-	ctn = $("vertical_fills");
-	removeChildren(ctn);
-	tbl = arr2tbl(fills.vertical_fills);
-	setOnMouseOver(tbl);
-	ctn.appendChild(tbl);
+	if (updateTable) {
+		var ctn, tbl;
+		
+		ctn = $("horizontal_fills");
+		removeChildren(ctn);
+		tbl = arr2tbl(fills.horizontal_fills);
+		setOnMouseOver(tbl);
+		ctn.appendChild(tbl);
+		
+		ctn = $("vertical_fills");
+		removeChildren(ctn);
+		tbl = arr2tbl(fills.vertical_fills);
+		setOnMouseOver(tbl);
+		ctn.appendChild(tbl);
+	}
 }
 
 </script>
@@ -454,7 +456,7 @@ load file : <input type="file" size="80" onchange="loadImage(this.files[0]);" />
 <span id="imageInfo"></span>
 font size : <input id="fontSize" type="number" value="16" min="0" max="32" onkeydown="if (event.which==13) setFontSize();" /><input type="button" value="set" onclick="setFontSize();" /><br>
 <span id="fontInfo"></span><br>
-char code : <input id="charCode" type="number" default="150" min="0" onkeydown="if (event.which==13) setCharCode();" /><input type="button" value="set" onclick="setCharCode();" /><br>
+char code : <input id="charCode" type="number" default="150" min="0" onkeydown="if (event.which==13) setCharCode(1);" /><input type="button" value="set" onclick="setCharCode(1);" /><br>
 <span id="boxInfo"></span><br>
 
 <div style="position:relative; top:0px; left:0px;">
